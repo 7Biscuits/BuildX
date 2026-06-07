@@ -1,0 +1,235 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Get a free hosted Postgres database in seconds: `npx create-db`
+generator client {
+  provider   = "prisma-client"
+  output     = "../generated/prisma"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum AccountStatus {
+  PENDING // Registered but not yet verified
+  VERIFIED // Approved by admin
+  REJECTED // Rejected by admin
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum QuizStatus {
+  DRAFT
+  READY
+  ARCHIVED
+}
+
+enum QuizSessionStatus {
+  WAITING
+  RUNNING
+  ENDED
+}
+
+enum ParticipantSessionStatus {
+  JOINED
+  TAKING
+  SUBMITTED
+  DISCONNECTED
+}
+
+// ─── Models ──────────────────────────────────────────────────
+
+model User {
+  id          String        @id @default(uuid())
+  name        String
+  email       String        @unique
+  password    String
+  contact     String
+  institution String
+  role        UserRole      @default(USER)
+  status      AccountStatus @default(PENDING)
+  deletedUsers String[]      @default([])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  paymentVerification   PaymentVerification?  @relation("UserPayment")
+  approvedVerifications PaymentVerification[] @relation("AdminApprover")
+  quizzesHosted         Quiz[]                @relation("QuizHost")
+  quizSessionsHosted    QuizSession[]         @relation("SessionHost")
+  participantSessions   ParticipantSession[]
+  answerSubmissions     AnswerSubmission[]
+  quizResults           QuizResult[]
+
+  @@map("users")
+}
+
+model PaymentVerification {
+  id String @id @default(uuid())
+
+  paymentSlipUrl  String?
+  submittedAmount Float?
+
+  verifiedAmount Float?
+
+  status VerificationStatus @default(PENDING)
+
+  rejectionReason String @default("Not Specified")
+
+  submittedAt DateTime  @default(now())
+  verifiedAt  DateTime?
+
+  userId            String  @unique
+  verifiedByAdminId String?
+
+  user User @relation("UserPayment", fields: [userId], references: [id])
+
+  verifiedByAdmin User? @relation("AdminApprover", fields: [verifiedByAdminId], references: [id])
+}
+
+model Quiz {
+  id                      String     @id @default(uuid())
+  title                   String
+  description             String?
+  durationMinutes         Int?
+  leaderboardDisplayLimit Int        @default(10)
+  status                  QuizStatus @default(DRAFT)
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
+
+  createdByAdminId String
+  createdByAdmin   User @relation("QuizHost", fields: [createdByAdminId], references: [id])
+
+  questions Question[]
+  sessions  QuizSession[]
+  results   QuizResult[]
+
+  @@index([createdByAdminId])
+}
+
+model Question {
+  id        String   @id @default(uuid())
+  quizId    String
+  text      String
+  order     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quiz       Quiz               @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  options    Option[]
+  submissions AnswerSubmission[]
+
+  @@unique([quizId, order])
+  @@index([quizId])
+}
+
+model Option {
+  id         String   @id @default(uuid())
+  questionId String
+  text       String
+  isCorrect  Boolean  @default(false)
+  order      Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, order])
+  @@index([questionId])
+}
+
+model QuizSession {
+  id                      String            @id @default(uuid())
+  quizId                  String
+  hostAdminId             String
+  joinCode                String            @unique
+  status                  QuizSessionStatus @default(WAITING)
+  allowLateJoin           Boolean           @default(false)
+  durationMinutes         Int
+  leaderboardDisplayLimit Int
+  startedAt               DateTime?
+  endsAt                  DateTime?
+  endedAt                 DateTime?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  quiz                 Quiz                 @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  hostAdmin            User                 @relation("SessionHost", fields: [hostAdminId], references: [id])
+  participantSessions  ParticipantSession[]
+  answerSubmissions    AnswerSubmission[]
+  results              QuizResult[]
+
+  @@index([quizId])
+  @@index([hostAdminId])
+  @@index([status])
+}
+
+model ParticipantSession {
+  id          String                   @id @default(uuid())
+  sessionId   String
+  userId      String
+  status      ParticipantSessionStatus @default(JOINED)
+  joinedAt    DateTime                 @default(now())
+  submittedAt DateTime?
+  lastSeenAt  DateTime                 @default(now())
+
+  session QuizSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  result  QuizResult?
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([userId])
+}
+
+model AnswerSubmission {
+  id                String   @id @default(uuid())
+  sessionId         String
+  participantUserId String
+  questionId        String
+  selectedOptionIds String[] @default([])
+  isCorrect         Boolean  @default(false)
+  submittedAt       DateTime @default(now())
+
+  session QuizSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [participantUserId], references: [id], onDelete: Cascade)
+  question Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, participantUserId, questionId])
+  @@index([participantUserId])
+  @@index([questionId])
+}
+
+model QuizResult {
+  id                   String   @id @default(uuid())
+  quizId               String
+  sessionId            String
+  participantSessionId String   @unique
+  userId               String
+  score                Int
+  totalQuestions       Int
+  percentage           Float
+  rank                 Int
+  submittedAt          DateTime
+  durationSeconds      Int
+  createdAt            DateTime @default(now())
+
+  quiz               Quiz               @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  session            QuizSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participantSession ParticipantSession @relation(fields: [participantSessionId], references: [id], onDelete: Cascade)
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+  @@index([quizId])
+  @@index([userId])
+}

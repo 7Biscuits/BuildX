@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
-import { AccountStatus, UserRole } from "../../generated/prisma/client";
+import { UserRole } from "../../generated/prisma/client";
 import { prisma } from "../lib/prisma";
+import { fail, ok } from "../utils/http";
 
 const userProfileSelect = {
   id: true,
@@ -8,12 +9,27 @@ const userProfileSelect = {
   email: true,
   contact: true,
   institution: true,
+  role: true,
   status: true,
+  createdAt: true,
+  paymentVerification: {
+    select: {
+      id: true,
+      paymentSlipUrl: true,
+      submittedAmount: true,
+      verifiedAmount: true,
+      status: true,
+      rejectionReason: true,
+      submittedAt: true,
+      verifiedAt: true,
+      verifiedByAdminId: true,
+    },
+  },
 } as const;
 
 export const getProfile = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.userId;
+    const userId = req.user?.userId;
 
     const user = await prisma.user.findFirst({
       where: {
@@ -24,27 +40,11 @@ export const getProfile = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return fail(res, 404, "User not found");
     }
 
-    if (user.status !== AccountStatus.VERIFIED) {
-      return res.status(403).json({
-        success: false,
-        message: "Account not verified by admin yet",
-      });
-    }
-
-    return res.json({
-      success: true,
-      data: user,
-    });
+    return ok(res, user);
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch profile",
-    });
+    return fail(res, 500, "Failed to fetch profile");
   }
 };

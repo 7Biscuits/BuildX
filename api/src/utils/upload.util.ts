@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
 import { supabase } from "./supabase";
-
-const PAYMENT_SLIPS_BUCKET = "payment-slips";
+import { env } from "../config/env";
 
 const allowedImageTypes = {
   "image/jpeg": "jpg",
@@ -42,7 +41,7 @@ export const uploadPaymentSlip = async ({
     throw new StorageUploadError("File buffer is empty", 400);
   }
 
-  if (!isAllowedImageMimeType(mimeType)) {
+  if (!isAllowedImageMimeType(mimeType) || !hasValidImageSignature(fileBuffer, mimeType)) {
     throw new StorageUploadError("Only image files are allowed", 400);
   }
 
@@ -50,7 +49,7 @@ export const uploadPaymentSlip = async ({
   const filePath = `${userId}/${randomUUID()}.${extension}`;
 
   const { data, error } = await supabase.storage
-    .from(PAYMENT_SLIPS_BUCKET)
+    .from(env.PAYMENT_SLIPS_BUCKET)
     .upload(filePath, fileBuffer, {
       cacheControl: "31536000",
       contentType: mimeType,
@@ -64,7 +63,7 @@ export const uploadPaymentSlip = async ({
   }
 
   const { data: publicUrlData } = supabase.storage
-    .from(PAYMENT_SLIPS_BUCKET)
+    .from(env.PAYMENT_SLIPS_BUCKET)
     .getPublicUrl(data.path);
 
   if (!publicUrlData.publicUrl) {
@@ -81,4 +80,20 @@ const isAllowedImageMimeType = (
   mimeType: string,
 ): mimeType is AllowedImageMimeType => {
   return Object.hasOwn(allowedImageTypes, mimeType);
+};
+
+const hasValidImageSignature = (buffer: Buffer, mimeType: AllowedImageMimeType) => {
+  if (mimeType === "image/jpeg" || mimeType === "image/jpg") {
+    return buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  }
+
+  if (mimeType === "image/png") {
+    return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  }
+
+  if (mimeType === "image/webp") {
+    return buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+  }
+
+  return false;
 };

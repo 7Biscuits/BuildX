@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   changeAdminPassword,
+  getCurrentSessionUser,
   login,
   loginAdmin,
   logout,
@@ -51,6 +52,8 @@ authRouter.patch(
   authorize(["ADMIN"]),
   changeAdminPassword,
 );
+
+authRouter.get("/me", authenticate, getCurrentSessionUser);
 
 /*
     @route   POST /api/auth/logout

@@ -8,10 +8,45 @@ import {
 } from "../../generated/prisma/client";
 import { prisma } from "../lib/prisma";
 import { emitQuizEvent } from "./quiz-realtime.service";
+import { logger } from "../lib/logger";
 
 const activeTimers = new Map<string, NodeJS.Timeout>();
 
+const isMissingQuizSessionTableError = (error: unknown) => {
+  if (!error || typeof error !== "object") return false;
+
+  const maybePrismaError = error as {
+    code?: string;
+    meta?: {
+      modelName?: string;
+      driverAdapterError?: {
+        cause?: {
+          kind?: string;
+          table?: string;
+        };
+      };
+    };
+  };
+
+  return (
+    maybePrismaError.code === "P2021" &&
+    (maybePrismaError.meta?.modelName === "QuizSession" ||
+      maybePrismaError.meta?.driverAdapterError?.cause?.kind === "TableDoesNotExist" ||
+      maybePrismaError.meta?.driverAdapterError?.cause?.table === "public.QuizSession")
+  );
+};
+
 export const generateJoinCode = () => randomBytes(4).toString("hex").toUpperCase();
+
+const createUniqueJoinCode = async () => {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const joinCode = generateJoinCode();
+    const existing = await prisma.quizSession.findUnique({ where: { joinCode } });
+    if (!existing) return joinCode;
+  }
+
+  throw new Error("Failed to generate unique join code");
+};
 
 export const createQuizSessionForAdmin = async (
   quizId: string,
@@ -34,12 +69,14 @@ export const createQuizSessionForAdmin = async (
     throw new Error("Quiz duration is not configured");
   }
 
+  const joinCode = await createUniqueJoinCode();
+
   return prisma.quizSession.create({
     data: {
       quizId,
       hostAdminId,
       allowLateJoin,
-      joinCode: generateJoinCode(),
+      joinCode,
       durationMinutes: quiz.durationMinutes,
       leaderboardDisplayLimit: quiz.leaderboardDisplayLimit,
     },
@@ -96,7 +133,13 @@ export const joinQuizSession = async (joinCode: string, userId: string) => {
   emitQuizEvent(session.id, "participant:joined", participant);
   await emitSessionStatus(session.id);
 
-  return { session, participant };
+  return {
+    sessionId: session.id,
+    participantSessionId: participant.id,
+    status: participant.status,
+    session,
+    participant,
+  };
 };
 
 export const startQuizSession = async (sessionId: string, adminId: string) => {
@@ -248,7 +291,29 @@ export const getSessionState = async (sessionId: string) => {
   return prisma.quizSession.findUnique({
     where: { id: sessionId },
     include: {
-      quiz: { select: { id: true, title: true, durationMinutes: true } },
+      quiz: {
+        select: {
+          id: true,
+          title: true,
+          durationMinutes: true,
+          questions: {
+            orderBy: { order: "asc" },
+            select: {
+              id: true,
+              text: true,
+              order: true,
+              options: {
+                orderBy: { order: "asc" },
+                select: {
+                  id: true,
+                  text: true,
+                  order: true,
+                },
+              },
+            },
+          },
+        },
+      },
       participantSessions: {
         include: {
           user: { select: { id: true, name: true, email: true } },
@@ -289,16 +354,29 @@ export const getUserQuizHistory = async (userId: string) => {
 };
 
 export const resumeRunningQuizTimers = async () => {
-  const runningSessions = await prisma.quizSession.findMany({
-    where: {
-      status: QuizSessionStatus.RUNNING,
-      endsAt: { not: null },
-    },
-    select: {
-      id: true,
-      endsAt: true,
-    },
-  });
+  let runningSessions: { id: string; endsAt: Date | null }[] = [];
+
+  try {
+    runningSessions = await prisma.quizSession.findMany({
+      where: {
+        status: QuizSessionStatus.RUNNING,
+        endsAt: { not: null },
+      },
+      select: {
+        id: true,
+        endsAt: true,
+      },
+    });
+  } catch (error) {
+    if (isMissingQuizSessionTableError(error)) {
+      logger.warn(
+        "Quiz session table is missing; skipping quiz timer recovery during startup. Apply database migrations before using quiz features.",
+      );
+      return;
+    }
+
+    throw error;
+  }
 
   for (const session of runningSessions) {
     if (!session.endsAt) continue;
@@ -341,6 +419,14 @@ const persistAnswersAndMarkSubmitted = async (
   if (!session) throw new Error("Session not found");
 
   const questionMap = new Map(session.quiz.questions.map((question) => [question.id, question]));
+  const answeredQuestionIds = new Set(answers.map((answer) => answer.questionId));
+
+  for (const question of session.quiz.questions) {
+    if (!answeredQuestionIds.has(question.id)) {
+      throw new Error("All questions must be submitted");
+    }
+  }
+
   const normalizedAnswers = answers.map((answer) => {
     const question = questionMap.get(answer.questionId);
     if (!question) throw new Error("Invalid question");
@@ -483,7 +569,9 @@ const scheduleSessionExpiry = (sessionId: string, endsAt: Date) => {
   clearSessionTimer(sessionId);
   const delayMs = Math.max(0, endsAt.getTime() - Date.now());
   const timer = setTimeout(() => {
-    void endQuizSession(sessionId, "timer");
+    void endQuizSession(sessionId, "timer").catch((error) => {
+      logger.error("Failed to auto-end quiz session", { sessionId, error });
+    });
   }, delayMs);
   activeTimers.set(sessionId, timer);
 };
@@ -492,6 +580,13 @@ const clearSessionTimer = (sessionId: string) => {
   const timer = activeTimers.get(sessionId);
   if (timer) clearTimeout(timer);
   activeTimers.delete(sessionId);
+};
+
+export const clearQuizTimers = () => {
+  for (const timer of activeTimers.values()) {
+    clearTimeout(timer);
+  }
+  activeTimers.clear();
 };
 
 const emitSessionStatus = async (sessionId: string) => {

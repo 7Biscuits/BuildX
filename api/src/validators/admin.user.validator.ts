@@ -22,6 +22,7 @@ export const userQueryValidator = z.object({
       AccountStatus.REJECTED,
     ])
     .optional(),
+  query: z.string().trim().min(1).max(200).optional(),
   name: z.string().trim().min(1).optional(),
   institution: z.string().trim().min(1).optional(),
 });
@@ -79,5 +80,17 @@ export const updateAdminSelfValidator = z
       .min(2, "Institution name is required")
       .max(200, "Institution name cannot exceed 200 characters")
       .optional(),
+  })
+  .strict();
+
+export const rejectPaymentValidator = z
+  .object({
+    reason: z.string().trim().min(2).max(500).optional(),
+  })
+  .strict();
+
+export const approvePaymentValidator = z
+  .object({
+    verifiedAmount: z.coerce.number().finite().nonnegative().optional(),
   })
   .strict();

@@ -3,12 +3,28 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
+const getValidUrl = (...values: Array<string | undefined>) => {
+  for (const value of values) {
+    if (!value) continue;
+
+    try {
+      return new URL(value).toString();
+    } catch {
+      continue;
+    }
+  }
+
+  return undefined;
+};
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
+    url:
+      getValidUrl(process.env["DIRECT_URL"], process.env["DATABASE_URL"]) ??
+      process.env["DATABASE_URL"],
   },
 });

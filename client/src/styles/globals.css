@@ -1,0 +1,194 @@
+@import url("https://fonts.googleapis.com/css2?family=VT323&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 250 35% 4%;
+    --foreground: 0 0% 98%;
+    --card: 250 30% 6%;
+    --card-foreground: 0 0% 98%;
+    --popover: 250 30% 6%;
+    --popover-foreground: 0 0% 98%;
+    
+    /* Neon HSL values */
+    --primary: 326 100% 50%; /* Hot Pink #ff007f */
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 198 91% 58%; /* Bright Blue #31baf5 */
+    --secondary-foreground: 250 35% 4%;
+    
+    --muted: 250 20% 12%;
+    --muted-foreground: 250 10% 65%;
+    
+    --accent: 280 100% 60%; /* Cyber Violet */
+    --accent-foreground: 0 0% 100%;
+    
+    --destructive: 0 85% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 250 20% 15%;
+    --input: 250 20% 15%;
+    --ring: 326 100% 50%;
+    
+    --radius: 0.125rem; /* Retro pixelated/almost-sharp corners */
+    color-scheme: dark;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    color-scheme: dark;
+  }
+
+  section[id] {
+    scroll-margin-top: 96px;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Space Grotesk', sans-serif;
+    min-width: 320px;
+    background-color: #07060c;
+  }
+
+  /* Monospace overrides for terminal feel */
+  .font-terminal {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+  }
+
+  .font-pixel {
+    font-family: 'VT323', monospace;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Scanlines Overlay */
+  .scanlines::after {
+    content: " ";
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    aspect-ratio: auto;
+    background-size: 100% 4px, 6px 100%;
+    z-index: 99999;
+    pointer-events: none;
+    opacity: 0.45;
+  }
+
+  /* CRT screen flicker */
+  .crt-screen {
+    animation: crt-flicker 0.15s infinite;
+  }
+
+  /* Synthwave neon glows */
+  .shadow-neon-pink {
+    box-shadow: 0 0 10px rgba(255, 0, 127, 0.2),
+                0 0 25px rgba(255, 0, 127, 0.15),
+                inset 0 0 8px rgba(255, 0, 127, 0.1);
+  }
+
+  .shadow-neon-cyan {
+    box-shadow: 0 0 10px rgba(49, 186, 245, 0.2),
+                0 0 25px rgba(49, 186, 245, 0.15),
+                inset 0 0 8px rgba(49, 186, 245, 0.1);
+  }
+
+  .shadow-neon-cyan-strong {
+    box-shadow: 0 0 15px rgba(49, 186, 245, 0.4),
+                0 0 35px rgba(49, 186, 245, 0.2),
+                inset 0 0 10px rgba(49, 186, 245, 0.2);
+  }
+
+  .shadow-neon-pink-strong {
+    box-shadow: 0 0 15px rgba(255, 0, 127, 0.4),
+                0 0 35px rgba(255, 0, 127, 0.2),
+                inset 0 0 10px rgba(255, 0, 127, 0.2);
+  }
+
+  .shadow-terminal {
+    box-shadow: 0 10px 40px rgba(7, 6, 12, 0.8),
+                0 0 0 1px rgba(255, 0, 127, 0.2);
+  }
+
+  .text-neon-pink {
+    text-shadow: 0 0 5px rgba(255, 0, 127, 0.6), 0 0 15px rgba(255, 0, 127, 0.3);
+  }
+
+  .text-neon-cyan {
+    text-shadow: 0 0 5px rgba(49, 186, 245, 0.6), 0 0 15px rgba(49, 186, 245, 0.3);
+  }
+
+  .text-neon-violet {
+    text-shadow: 0 0 5px rgba(168, 85, 247, 0.6), 0 0 15px rgba(168, 85, 247, 0.3);
+  }
+
+  .border-retro-double {
+    border: 3px double hsl(var(--border));
+  }
+
+  .border-retro-pink {
+    border: 2px solid hsl(var(--primary));
+  }
+
+  .border-retro-cyan {
+    border: 2px solid hsl(var(--secondary));
+  }
+
+  .glass-panel {
+    background: rgba(10, 8, 20, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 0, 127, 0.25);
+  }
+
+  .glass-panel-cyan {
+    background: rgba(10, 8, 20, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(49, 186, 245, 0.25);
+  }
+
+  .retro-btn-pink {
+    @apply border-2 border-primary bg-transparent text-primary transition-all duration-200 hover:bg-primary hover:text-white hover:shadow-neon-pink;
+  }
+
+  .retro-btn-cyan {
+    @apply border-2 border-secondary bg-transparent text-secondary transition-all duration-200 hover:bg-secondary hover:text-black hover:shadow-neon-cyan;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #090810;
+}
+::-webkit-scrollbar-thumb {
+  background: #25223c;
+  border: 1px solid rgba(255, 0, 127, 0.2);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ff007f;
+  box-shadow: 0 0 8px #ff007f;
+}
+
+/* CRT Screen Flickering Keyframe */
+@keyframes crt-flicker {
+  0% { opacity: 0.995; }
+  50% { opacity: 1; }
+  100% { opacity: 0.99; }
+}

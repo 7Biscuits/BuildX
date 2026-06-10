@@ -21,13 +21,9 @@ import {
   VerificationStatus,
   UserRole,
 } from "../../generated/prisma/client";
-
-const JWT_SECRET = process.env.JWT_SECRET!;
-const ADMIN_DEFAULT_PASSWORD = process.env.ADMIN_DEFAULT_PASSWORD;
-
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET is not defined");
-}
+import { env, isProduction } from "../config/env";
+import { logger } from "../lib/logger";
+import { created, fail, ok, validationFail } from "../utils/http";
 
 export const register = async (
   req: Request,
@@ -37,38 +33,25 @@ export const register = async (
     const parsed = registerValidator.safeParse(req.body);
 
     if (!parsed.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: parsed.error.issues,
-      });
+      return validationFail(res, parsed.error);
     }
 
     const { name, email, password, contact, institution } = parsed.data;
 
     if (isAllowedAdminEmail(email)) {
-      return res.status(403).json({
-        success: false,
-        message: "Please use the admin registration route",
-      });
+      return fail(res, 403, "Please use the admin registration route");
     }
 
     const paymentFile = getUploadedPaymentFile(req);
 
     if (!paymentFile) {
-      return res.status(400).json({
-        success: false,
-        message: "Payment receipt image is required",
-      });
+      return fail(res, 400, "Payment receipt image is required");
     }
 
     const submittedAmount = parseSubmittedAmount(req.body.submittedAmount);
 
     if (submittedAmount === null) {
-      return res.status(400).json({
-        success: false,
-        message: "submittedAmount must be a valid number",
-      });
+      return fail(res, 400, "submittedAmount must be a valid number");
     }
 
     const existingUser = await prisma.user.findUnique({
@@ -82,10 +65,7 @@ export const register = async (
 
     if (existingUser) {
       if (existingUser.status !== AccountStatus.REJECTED) {
-        return res.status(409).json({
-          success: false,
-          message: "User already exists",
-        });
+        return fail(res, 409, "User already exists");
       }
 
       const isPasswordValid = await bcrypt.compare(
@@ -94,10 +74,7 @@ export const register = async (
       );
 
       if (!isPasswordValid) {
-        return res.status(401).json({
-          success: false,
-          message: "Invalid credentials for payment resubmission",
-        });
+        return fail(res, 401, "Invalid credentials for payment resubmission");
       }
 
       const { publicUrl: paymentSlipUrl } = await uploadPaymentSlip({
@@ -139,11 +116,8 @@ export const register = async (
         });
       });
 
-      return res.status(200).json({
-        success: true,
-        message: "Payment receipt resubmitted. Verification is pending.",
-        data: user,
-      });
+      setAuthCookie(res, createAuthToken(user.id, user.role));
+      return ok(res, user, "Payment receipt resubmitted. Verification is pending.");
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
@@ -174,25 +148,16 @@ export const register = async (
       select: userResponseSelect,
     });
 
-    return res.status(201).json({
-      success: true,
-      message: "Account created. Payment verification is pending.",
-      data: user,
-    });
+    setAuthCookie(res, createAuthToken(user.id, user.role));
+    return created(res, user, "Account created. Payment verification is pending.");
   } catch (error) {
-    console.error("REGISTER_ERROR:", error);
+    logger.error("REGISTER_ERROR", { error });
 
     if (error instanceof StorageUploadError) {
-      return res.status(error.statusCode).json({
-        success: false,
-        message: error.message,
-      });
+      return fail(res, error.statusCode, error.message);
     }
 
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return fail(res, 500, "Internal server error");
   }
 };
 
@@ -201,11 +166,7 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
     const parsed = loginValidator.safeParse(req.body);
 
     if (!parsed.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: parsed.error.issues,
-      });
+      return validationFail(res, parsed.error);
     }
 
     const { email, password } = parsed.data;
@@ -217,40 +178,25 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
     });
 
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
+      return fail(res, 401, "Invalid credentials");
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
+      return fail(res, 401, "Invalid credentials");
     }
 
     if (user.role === UserRole.ADMIN) {
-      return res.status(403).json({
-        success: false,
-        message: "Please use the admin login route",
-      });
+      return fail(res, 403, "Please use the admin login route");
     }
 
     if (user.status === AccountStatus.REJECTED) {
-      return res.status(403).json({
-        success: false,
-        message: "Payment verification was rejected. Please resubmit a valid receipt.",
-      });
+      return fail(res, 403, "Payment verification was rejected. Please resubmit a valid receipt.");
     }
 
     if (user.status !== AccountStatus.VERIFIED) {
-      return res.status(403).json({
-        success: false,
-        message: "Account not verified by admin yet",
-      });
+      return fail(res, 403, "Account not verified by admin yet");
     }
 
     const token = jwt.sign(
@@ -258,18 +204,13 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
         userId: user.id,
         role: user.role,
       },
-      JWT_SECRET,
+      env.JWT_SECRET,
       {
         expiresIn: "7d",
       },
     );
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    setAuthCookie(res, token);
 
     return res.status(200).json({
       success: true,
@@ -285,12 +226,9 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
       },
     });
   } catch (error) {
-    console.error("LOGIN_ERROR:", error);
+    logger.error("LOGIN_ERROR", { error });
 
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return fail(res, 500, "Internal server error");
   }
 };
 
@@ -302,27 +240,17 @@ export const registerAdmin = async (
     const parsed = adminRegisterValidator.safeParse(req.body);
 
     if (!parsed.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: parsed.error.issues,
-      });
+      return validationFail(res, parsed.error);
     }
 
     const { name, email, institution, password } = parsed.data;
 
-    if (!ADMIN_DEFAULT_PASSWORD) {
-      return res.status(500).json({
-        success: false,
-        message: "Admin registration is not configured",
-      });
+    if (!env.ADMIN_DEFAULT_PASSWORD) {
+      return fail(res, 500, "Admin registration is not configured");
     }
 
-    if (!isAllowedAdminEmail(email) || password !== ADMIN_DEFAULT_PASSWORD) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid admin registration credentials",
-      });
+    if (!isAllowedAdminEmail(email) || password !== env.ADMIN_DEFAULT_PASSWORD) {
+      return fail(res, 401, "Invalid admin registration credentials");
     }
 
     const existingUser = await prisma.user.findUnique({
@@ -332,10 +260,7 @@ export const registerAdmin = async (
     });
 
     if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        message: "Admin account already exists",
-      });
+      return fail(res, 409, "Admin account already exists");
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
@@ -353,18 +278,11 @@ export const registerAdmin = async (
       select: userResponseSelect,
     });
 
-    return res.status(201).json({
-      success: true,
-      message: "Admin account created successfully",
-      data: admin,
-    });
+    return created(res, admin, "Admin account created successfully");
   } catch (error) {
-    console.error("ADMIN_REGISTER_ERROR:", error);
+    logger.error("ADMIN_REGISTER_ERROR", { error });
 
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return fail(res, 500, "Internal server error");
   }
 };
 
@@ -376,11 +294,7 @@ export const loginAdmin = async (
     const parsed = loginValidator.safeParse(req.body);
 
     if (!parsed.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: parsed.error.issues,
-      });
+      return validationFail(res, parsed.error);
     }
 
     const { email, password } = parsed.data;
@@ -396,19 +310,13 @@ export const loginAdmin = async (
       admin.role !== UserRole.ADMIN ||
       !isAllowedAdminEmail(admin.email)
     ) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid admin credentials",
-      });
+      return fail(res, 401, "Invalid admin credentials");
     }
 
     const isPasswordValid = await bcrypt.compare(password, admin.password);
 
     if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid admin credentials",
-      });
+      return fail(res, 401, "Invalid admin credentials");
     }
 
     const token = createAuthToken(admin.id, admin.role);
@@ -428,12 +336,9 @@ export const loginAdmin = async (
       },
     });
   } catch (error) {
-    console.error("ADMIN_LOGIN_ERROR:", error);
+    logger.error("ADMIN_LOGIN_ERROR", { error });
 
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return fail(res, 500, "Internal server error");
   }
 };
 
@@ -445,14 +350,10 @@ export const changeAdminPassword = async (
     const parsed = adminChangePasswordValidator.safeParse(req.body);
 
     if (!parsed.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: parsed.error.issues,
-      });
+      return validationFail(res, parsed.error);
     }
 
-    const adminId = (req as any).user?.userId;
+    const adminId = req.user?.userId;
     const { currentPassword, newPassword } = parsed.data;
 
     const admin = await prisma.user.findUnique({
@@ -462,10 +363,7 @@ export const changeAdminPassword = async (
     });
 
     if (!admin || admin.role !== UserRole.ADMIN) {
-      return res.status(403).json({
-        success: false,
-        message: "Forbidden",
-      });
+      return fail(res, 403, "Forbidden");
     }
 
     const isPasswordValid = await bcrypt.compare(
@@ -474,10 +372,7 @@ export const changeAdminPassword = async (
     );
 
     if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: "Current password is incorrect",
-      });
+      return fail(res, 401, "Current password is incorrect");
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 12);
@@ -491,17 +386,11 @@ export const changeAdminPassword = async (
       },
     });
 
-    return res.status(200).json({
-      success: true,
-      message: "Password changed successfully",
-    });
+    return res.status(200).json({ success: true, message: "Password changed successfully" });
   } catch (error) {
-    console.error("ADMIN_CHANGE_PASSWORD_ERROR:", error);
+    logger.error("ADMIN_CHANGE_PASSWORD_ERROR", { error });
 
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return fail(res, 500, "Internal server error");
   }
 };
 
@@ -531,10 +420,7 @@ const parseSubmittedAmount = (value: unknown): number | undefined | null => {
 };
 
 const getAllowedAdminEmails = () => {
-  return (process.env.ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
+  return env.ADMIN_EMAILS;
 };
 
 const isAllowedAdminEmail = (email: string) => {
@@ -547,7 +433,7 @@ const createAuthToken = (userId: string, role: string) => {
       userId,
       role,
     },
-    JWT_SECRET,
+    env.JWT_SECRET,
     {
       expiresIn: "7d",
     },
@@ -557,8 +443,9 @@ const createAuthToken = (userId: string, role: string) => {
 const setAuthCookie = (res: Response, token: string) => {
   res.cookie("token", token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 };
@@ -566,12 +453,40 @@ const setAuthCookie = (res: Response, token: string) => {
 export const logout = async (_: Request, res: Response): Promise<Response> => {
   res.clearCookie("token", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
   });
 
   return res.status(200).json({
     success: true,
     message: "Logged out successfully",
   });
+};
+
+export const getCurrentSessionUser = async (
+  req: Request,
+  res: Response,
+): Promise<Response> => {
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return fail(res, 401, "Unauthorized");
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: userResponseSelect,
+    });
+
+    if (!user) {
+      return fail(res, 404, "User not found");
+    }
+
+    return ok(res, user);
+  } catch (error) {
+    logger.error("AUTH_ME_ERROR", { error });
+    return fail(res, 500, "Internal server error");
+  }
 };

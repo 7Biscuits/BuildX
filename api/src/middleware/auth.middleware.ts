@@ -1,11 +1,14 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { z } from "zod";
+import { UserRole } from "../../generated/prisma/client";
+import { env } from "../config/env";
+import { fail } from "../utils/http";
 
-const JWT_SECRET = process.env.JWT_SECRET;
-
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET is not defined");
-}
+const jwtPayloadValidator = z.object({
+  userId: z.uuid(),
+  role: z.enum([UserRole.USER, UserRole.ADMIN]),
+});
 
 export const authenticate = (
   req: Request,
@@ -14,14 +17,14 @@ export const authenticate = (
 ) => {
   const token = getAuthToken(req);
 
-  if (!token) return res.status(401).json({ message: "Unauthorized" });
+  if (!token) return fail(res, 401, "Unauthorized");
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    (req as any).user = decoded;
+    const decoded = jwtPayloadValidator.parse(jwt.verify(token, env.JWT_SECRET));
+    req.user = decoded;
     next();
   } catch (err) {
-    res.status(401).json({ message: "Invalid jwt token" });
+    return fail(res, 401, "Invalid jwt token");
   }
 };
 
@@ -40,11 +43,9 @@ const getAuthToken = (req: Request) => {
 // Middleware to restrict access based on roles
 export const authorize = (roles: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
-    const user = (req as any).user;
-    if (!roles.includes(user.role)) {
-      return res
-        .status(403)
-        .json({ message: "Forbidden: Insufficient permissions" });
+    const user = req.user;
+    if (!user || !roles.includes(user.role)) {
+      return fail(res, 403, "Forbidden: Insufficient permissions");
     }
     next();
   };

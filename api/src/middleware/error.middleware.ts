@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import multer from "multer";
+import { logger } from "../lib/logger";
 
 export const notFoundHandler = (
   req: Request,
@@ -33,7 +34,7 @@ export const errorHandler = (
     });
   }
 
-  console.error("UNHANDLED_ERROR:", err);
+  logger.error("UNHANDLED_ERROR", { error: err });
 
   return res.status(500).json({
     success: false,

@@ -9,6 +9,8 @@ import {
   updateUserValidator,
   userQueryValidator,
 } from "../validators/admin.user.validator";
+import { env } from "../config/env";
+import { fail, ok, validationFail } from "../utils/http";
 
 const accountSelect = {
   id: true,
@@ -41,20 +43,32 @@ export const getUsers = async (req: Request, res: Response) => {
     const parsed = userQueryValidator.safeParse(normalizeUserQuery(req.query));
 
     if (!parsed.success) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Invalid filters. status must be PENDING, VERIFIED, or REJECTED.",
-        errors: parsed.error.issues,
-      });
+      return validationFail(res, parsed.error);
     }
 
-    const { status, name, institution } = parsed.data;
+    const { status, query, name, institution } = parsed.data;
+    const normalizedQuery = query?.trim();
 
     const users = await prisma.user.findMany({
       where: {
         role: UserRole.USER,
         ...(status ? { status } : {}),
+        ...(normalizedQuery
+          ? {
+              OR: [
+                { id: normalizedQuery },
+                { email: { contains: normalizedQuery, mode: "insensitive" as const } },
+                { contact: { contains: normalizedQuery, mode: "insensitive" as const } },
+                { name: { contains: normalizedQuery, mode: "insensitive" as const } },
+                {
+                  institution: {
+                    contains: normalizedQuery,
+                    mode: "insensitive" as const,
+                  },
+                },
+              ],
+            }
+          : {}),
         ...(name
           ? { name: { contains: name, mode: "insensitive" as const } }
           : {}),
@@ -73,15 +87,9 @@ export const getUsers = async (req: Request, res: Response) => {
       },
     });
 
-    return res.json({
-      success: true,
-      data: users,
-    });
+    return ok(res, users);
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch users",
-    });
+    return fail(res, 500, "Failed to fetch users");
   }
 };
 
@@ -290,7 +298,7 @@ export const updateOwnAdminAccount = async (req: Request, res: Response) => {
       });
     }
 
-    const adminId = (req as any).user?.userId;
+    const adminId = req.user?.userId;
 
     const admin = await prisma.user.findFirst({
       where: {
@@ -340,7 +348,7 @@ export const deleteUser = async (req: Request, res: Response) => {
       });
     }
 
-    const adminId = (req as any).user?.userId;
+    const adminId = req.user?.userId;
 
     const user = await prisma.user.findFirst({
       where: {
@@ -406,17 +414,14 @@ const normalizeUserQuery = (query: Request["query"]) => {
 
   return {
     status: normalizedStatus,
+    query: query.query,
     name: query.name,
     institution: query.institution,
   };
 };
 
 const isAllowedAdminEmail = (email: string) => {
-  return (process.env.ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((allowedEmail) => allowedEmail.trim().toLowerCase())
-    .filter(Boolean)
-    .includes(email);
+  return env.ADMIN_EMAILS.includes(email);
 };
 
 const handleUniqueConstraintError = (

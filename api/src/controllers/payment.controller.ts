@@ -8,14 +8,15 @@ import {
 import { getUploadedPaymentFile } from "../middleware/multer.middleware";
 import { submitPendingPaymentVerification } from "../services/payment-verification.service";
 import "multer";
+import { fail, ok } from "../utils/http";
 
 export const uploadPaymentSlip = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = req.user!.userId;
     const paymentFile = getUploadedPaymentFile(req);
 
     if (!paymentFile) {
-      return res.status(400).json({ message: "No file uploaded" });
+      return fail(res, 400, "No file uploaded");
     }
 
     const { publicUrl } = await uploadPaymentSlipToStorage({
@@ -27,10 +28,7 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
     const submittedAmount = parseSubmittedAmount(req.body.submittedAmount);
 
     if (submittedAmount === null) {
-      return res.status(400).json({
-        success: false,
-        message: "submittedAmount must be a valid number",
-      });
+      return fail(res, 400, "submittedAmount must be a valid number");
     }
 
     const payment = await submitPendingPaymentVerification({
@@ -39,23 +37,13 @@ export const uploadPaymentSlip = async (req: Request, res: Response) => {
       submittedAmount,
     });
 
-    return res.json({
-      success: true,
-      message: "Payment submitted",
-      data: payment,
-    });
+    return ok(res, payment, "Payment submitted");
   } catch (err) {
     if (err instanceof StorageUploadError) {
-      return res.status(err.statusCode).json({
-        success: false,
-        message: err.message,
-      });
+      return fail(res, err.statusCode, err.message);
     }
 
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    return fail(res, 500, "Server error");
   }
 };
 

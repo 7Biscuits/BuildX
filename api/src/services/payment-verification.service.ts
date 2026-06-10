@@ -16,6 +16,15 @@ export const submitPendingPaymentVerification = async ({
   submittedAmount,
 }: SubmitPendingPaymentVerificationInput) => {
   return prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
+    if (!user || user.role !== "USER") {
+      throw new Error("Only user accounts can submit payment verification");
+    }
+
     const paymentVerification = await tx.paymentVerification.upsert({
       where: { userId },
       create: {

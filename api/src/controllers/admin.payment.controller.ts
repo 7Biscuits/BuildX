@@ -6,6 +6,11 @@ import {
   VerificationStatus,
 } from "../../generated/prisma/client";
 import { idValidator } from "../validators/id.validator";
+import {
+  approvePaymentValidator,
+  rejectPaymentValidator,
+} from "../validators/admin.user.validator";
+import { fail, ok, validationFail } from "../utils/http";
 
 const paymentWithUserInclude = {
   user: {
@@ -30,7 +35,7 @@ export const getPendingPayments = async (_: Request, res: Response) => {
       where: {
         status: VerificationStatus.PENDING,
         user: {
-          role: "USER",
+        role: "USER",
           status: AccountStatus.PENDING,
         },
       },
@@ -50,15 +55,9 @@ export const getPendingPayments = async (_: Request, res: Response) => {
       },
     });
 
-    return res.json({
-      success: true,
-      data: payments,
-    });
+    return ok(res, payments);
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch payments",
-    });
+    return fail(res, 500, "Failed to fetch payments");
   }
 };
 
@@ -67,31 +66,26 @@ export const getPendingPayments = async (_: Request, res: Response) => {
 */
 export const approvePayment = async (req: Request, res: Response) => {
   try {
-    const adminId = (req as any).user?.userId;
+    const adminId = req.user?.userId;
     const parsed = idValidator.safeParse(req.params);
 
     if (!parsed.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid payment id",
-        errors: parsed.error.issues,
-      });
+      return validationFail(res, parsed.error);
+    }
+
+    const bodyParsed = approvePaymentValidator.safeParse(req.body);
+    if (!bodyParsed.success) {
+      return validationFail(res, bodyParsed.error);
     }
 
     const paymentId = parsed.data.id;
-    const verifiedAmount = parseVerifiedAmount(req.body.verifiedAmount);
-
-    if (verifiedAmount === null) {
-      return res.status(400).json({
-        success: false,
-        message: "verifiedAmount must be a valid number",
-      });
-    }
+    const verifiedAmount = bodyParsed.data.verifiedAmount;
 
     const payment = await prisma.$transaction(async (tx) => {
       const updatedPayment = await tx.paymentVerification.update({
         where: {
           id: paymentId,
+          status: VerificationStatus.PENDING,
         },
         data: {
           status: VerificationStatus.APPROVED,
@@ -118,31 +112,10 @@ export const approvePayment = async (req: Request, res: Response) => {
       });
     });
 
-    return res.json({
-      success: true,
-      message: "Payment approved",
-      data: payment,
-    });
+    return ok(res, payment, "Payment approved");
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Approval failed",
-    });
+    return fail(res, 500, "Approval failed");
   }
-};
-
-const parseVerifiedAmount = (value: unknown): number | undefined | null => {
-  if (value === undefined || value === null || value === "") {
-    return undefined;
-  }
-
-  const amount = Number(value);
-
-  if (!Number.isFinite(amount)) {
-    return null;
-  }
-
-  return amount;
 };
 
 /*
@@ -150,31 +123,31 @@ const parseVerifiedAmount = (value: unknown): number | undefined | null => {
 */
 export const rejectPayment = async (req: Request, res: Response) => {
   try {
-    const adminId = (req as any).user?.userId;
+    const adminId = req.user?.userId;
     const parsed = idValidator.safeParse(req.params);
 
     if (!parsed.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid payment id",
-        errors: parsed.error.issues,
-      });
+      return validationFail(res, parsed.error);
     }
 
     const paymentId = parsed.data.id;
-
-    const { reason } = req.body;
+    const bodyParsed = rejectPaymentValidator.safeParse(req.body);
+    if (!bodyParsed.success) {
+      return validationFail(res, bodyParsed.error);
+    }
+    const reason = bodyParsed.data.reason || "Not Specified";
 
     const payment = await prisma.$transaction(async (tx) => {
       const updatedPayment = await tx.paymentVerification.update({
         where: {
           id: paymentId,
+          status: VerificationStatus.PENDING,
         },
         data: {
           status: VerificationStatus.REJECTED,
           verifiedAt: new Date(),
           verifiedByAdminId: adminId,
-          rejectionReason: reason || "Not Specified",
+          rejectionReason: reason,
         },
       });
 
@@ -195,15 +168,8 @@ export const rejectPayment = async (req: Request, res: Response) => {
       });
     });
 
-    return res.json({
-      success: true,
-      message: "Payment rejected",
-      data: payment,
-    });
+    return ok(res, payment, "Payment rejected");
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Rejection failed",
-    });
+    return fail(res, 500, "Rejection failed");
   }
 };

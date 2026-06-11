@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { authApi } from "@/lib/api";
 import {
+  API_BASE_URL,
   getStoredAuthToken,
   setStoredAuthToken,
   subscribeToAuthLogout,
@@ -9,6 +10,7 @@ import type { AuthUser, LoginPayload, RegisterPayload, AdminRegisterPayload } fr
 
 type AuthStatus = "idle" | "loading" | "authenticated" | "error";
 type VerificationStatus = "PENDING" | "VERIFIED" | "REJECTED" | null;
+type AuthAction = "login" | "register" | "admin-login" | "admin-register" | null;
 
 const AUTH_USER_KEY = "buildx.auth.user";
 
@@ -20,10 +22,11 @@ type AuthState = {
   isAuthenticated: boolean;
   status: AuthStatus;
   message: string | null;
+  lastAuthAction: AuthAction;
   checkAuth: () => Promise<void>;
   login: (payload: LoginPayload) => Promise<void>;
   loginAdmin: (payload: LoginPayload) => Promise<void>;
-  register: (payload: RegisterPayload) => Promise<void>;
+  register: (payload: RegisterPayload) => Promise<boolean>;
   registerAdmin: (payload: AdminRegisterPayload) => Promise<void>;
   logout: () => Promise<void>;
   setToken: (token: string | null) => void;
@@ -49,6 +52,10 @@ function getErrorMessage(error: unknown) {
       return "Wait until admin has verified your payment receipt.";
     }
 
+    if (data.message === "Admin account already exists") {
+      return "Admin account already exists. Please log in instead.";
+    }
+
     if (data.message?.toLowerCase().includes("payment verification was rejected")) {
       return "Payment rejected. Please upload a valid payment receipt.";
     }
@@ -57,6 +64,9 @@ function getErrorMessage(error: unknown) {
       return data.errors.map(e => `${e.path.join(".")}: ${e.message}`).join(" | ");
     }
     return data.message ?? "Something went wrong.";
+  }
+  if (error instanceof Error && error.message === "Network Error") {
+    return `Unable to reach the API at ${API_BASE_URL}. Check that the backend is running and the frontend env points to the correct port.`;
   }
   return "Something went wrong.";
 }
@@ -94,6 +104,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   ...sessionFields(storedUser),
   status: "loading",
   message: null,
+  lastAuthAction: null,
 
   async checkAuth() {
     try {
@@ -101,14 +112,18 @@ export const useAuthStore = create<AuthState>((set) => ({
       const result = await authApi.me();
       if (result.success && result.data) {
         persistUser(result.data);
-        set({ ...sessionFields(result.data), status: "authenticated" });
+        set({
+          ...sessionFields(result.data),
+          status: "authenticated",
+          lastAuthAction: null,
+        });
       } else {
         persistUser(null);
-        set({ ...sessionFields(null), status: "idle" });
+        set({ ...sessionFields(null), status: "idle", lastAuthAction: null });
       }
     } catch {
       persistUser(null);
-      set({ ...sessionFields(null), status: "idle" });
+      set({ ...sessionFields(null), status: "idle", lastAuthAction: null });
     }
   },
 
@@ -121,9 +136,15 @@ export const useAuthStore = create<AuthState>((set) => ({
         ...sessionFields(result.data),
         status: "authenticated",
         message: result.message ?? "Logged in successfully.",
+        lastAuthAction: "login",
       });
     } catch (error) {
-      set({ ...sessionFields(null), status: "error", message: getErrorMessage(error) });
+      set({
+        ...sessionFields(null),
+        status: "error",
+        message: getErrorMessage(error),
+        lastAuthAction: null,
+      });
     }
   },
 
@@ -136,9 +157,15 @@ export const useAuthStore = create<AuthState>((set) => ({
         ...sessionFields(result.data),
         status: "authenticated",
         message: result.message ?? "Admin logged in successfully.",
+        lastAuthAction: "admin-login",
       });
     } catch (error) {
-      set({ ...sessionFields(null), status: "error", message: getErrorMessage(error) });
+      set({
+        ...sessionFields(null),
+        status: "error",
+        message: getErrorMessage(error),
+        lastAuthAction: null,
+      });
     }
   },
 
@@ -146,16 +173,22 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ status: "loading", message: null });
     try {
       const result = await authApi.register(payload);
-      persistUser(result.data);
       set({
-        ...sessionFields(result.data),
-        status: "authenticated",
+        ...sessionFields(null),
+        status: "idle",
         message:
           result.message ??
-          "Registration submitted. Payment verification is pending.",
+          "User registered successfully. Payment verification is pending.",
+        lastAuthAction: "register",
       });
+      return true;
     } catch (error) {
-      set({ status: "error", message: getErrorMessage(error) });
+      set({
+        status: "error",
+        message: getErrorMessage(error),
+        lastAuthAction: null,
+      });
+      return false;
     }
   },
 
@@ -168,9 +201,15 @@ export const useAuthStore = create<AuthState>((set) => ({
         ...sessionFields(result.data),
         status: "authenticated",
         message: result.message ?? "Admin account created successfully.",
+        lastAuthAction: "admin-register",
       });
     } catch (error) {
-      set({ ...sessionFields(null), status: "error", message: getErrorMessage(error) });
+      set({
+        ...sessionFields(null),
+        status: "error",
+        message: getErrorMessage(error),
+        lastAuthAction: null,
+      });
     }
   },
 
@@ -182,7 +221,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     } finally {
       persistUser(null);
       setStoredAuthToken(null);
-      set({ ...sessionFields(null, null), status: "idle", message: null });
+      set({
+        ...sessionFields(null, null),
+        status: "idle",
+        message: null,
+        lastAuthAction: null,
+      });
     }
   },
 
@@ -197,13 +241,19 @@ export const useAuthStore = create<AuthState>((set) => ({
       ...sessionFields(user, state.token),
       status: user ? "authenticated" : "idle",
       message: state.message,
+      lastAuthAction: state.lastAuthAction,
     }));
   },
 
   clearSession() {
     persistUser(null);
     setStoredAuthToken(null);
-    set({ ...sessionFields(null, null), status: "idle", message: null });
+    set({
+      ...sessionFields(null, null),
+      status: "idle",
+      message: null,
+      lastAuthAction: null,
+    });
   },
 
   clearMessage() {

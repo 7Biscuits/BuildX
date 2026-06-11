@@ -1,6 +1,6 @@
-import { FormEvent, useState, useEffect } from "react";
+import { FormEvent, useMemo, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Loader2, Sparkles, Terminal, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Sparkles, Terminal, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -17,6 +17,8 @@ import { useAuthStore } from "@/store/authStore";
 export default function AuthPanel() {
   const { login, register, status, message, user, clearMessage } = useAuthStore();
   const [receipt, setReceipt] = useState<File | null>(null);
+  const [localMessage, setLocalMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"register" | "login">("register");
   const navigate = useNavigate();
   const location = useLocation();
   const isLoading = status === "loading";
@@ -39,6 +41,8 @@ export default function AuthPanel() {
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    clearMessage();
+    setLocalMessage(null);
     const form = new FormData(event.currentTarget);
     await login({
       email: String(form.get("email")),
@@ -48,18 +52,49 @@ export default function AuthPanel() {
 
   async function handleRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!receipt) return;
+    clearMessage();
+    setLocalMessage(null);
+
+    if (!receipt) {
+      setLocalMessage("Please select a payment receipt image before registering.");
+      return;
+    }
+
     const form = new FormData(event.currentTarget);
-    await register({
-      name: String(form.get("name")),
-      email: String(form.get("email")),
-      password: String(form.get("password")),
-      contact: String(form.get("contact")),
-      institution: String(form.get("institution")),
+    const password = String(form.get("password") ?? "");
+    const contact = String(form.get("contact") ?? "");
+    const email = String(form.get("email") ?? "");
+    const name = String(form.get("name") ?? "");
+    const institution = String(form.get("institution") ?? "");
+
+    const validationMessage = validateRegistrationInput({
+      name,
+      email,
+      password,
+      contact,
+      institution,
+      receipt,
+    });
+
+    if (validationMessage) {
+      setLocalMessage(validationMessage);
+      return;
+    }
+    const didRegister = await register({
+      name,
+      email,
+      password,
+      contact,
+      institution,
       submittedAmount: String(form.get("submittedAmount") ?? ""),
       paymentReceipt: receipt,
     });
-    setReceipt(null);
+
+    if (didRegister) {
+      event.currentTarget.reset();
+      setReceipt(null);
+      setActiveTab("login");
+    }
   }
 
   const blockedReason = (location.state as { blockedReason?: string } | null)?.blockedReason;
@@ -68,7 +103,19 @@ export default function AuthPanel() {
       ? "Wait until admin has verified your payment receipt."
       : blockedReason === "rejected"
         ? "Payment rejected. Please upload a valid payment receipt."
-        : message;
+        : message ?? localMessage;
+  const messageTone = useMemo(() => {
+    if (!statusMessage) return null;
+
+    if (
+      statusMessage.toLowerCase().includes("registered successfully") ||
+      statusMessage.toLowerCase().includes("verification is pending")
+    ) {
+      return "success";
+    }
+
+    return "error";
+  }, [statusMessage]);
 
   return (
     <Card id="auth" className="glass-panel scroll-mt-24 shadow-glow border-primary/45 rounded-md overflow-hidden font-terminal crt-screen">
@@ -85,7 +132,30 @@ export default function AuthPanel() {
         </CardDescription>
       </CardHeader>
       <CardContent className="p-6 bg-[#090812]/90">
-        <Tabs defaultValue="register" className="w-full">
+        {statusMessage && (
+          <div
+            className={
+              messageTone === "success"
+                ? "mb-5 rounded border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200"
+                : "mb-5 rounded border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200"
+            }
+          >
+            <div className="flex items-start gap-2">
+              {messageTone === "success" ? (
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+              ) : (
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              )}
+              <p className="leading-5">{statusMessage}</p>
+            </div>
+          </div>
+        )}
+
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as "register" | "login")}
+          className="w-full"
+        >
           <TabsList className="grid grid-cols-2 bg-[#121124] border border-primary/20 rounded p-1 mb-6">
             <TabsTrigger 
               value="register" 
@@ -103,13 +173,18 @@ export default function AuthPanel() {
 
           {/* User Registration Form */}
           <TabsContent value="register">
-            <form className="space-y-4" onSubmit={handleRegister}>
+            <form className="space-y-4" onSubmit={handleRegister} noValidate>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field name="name" label="SYS_NAME" placeholder="Enter Full Name" />
                 <Field name="email" label="SYS_EMAIL" type="email" placeholder="email@address.com" />
                 <Field name="contact" label="SYS_CONTACT" placeholder="Contact digits" />
                 <Field name="institution" label="SYS_ORGANIZATION" placeholder="School/College Name" />
-                <Field name="password" label="SYS_PASSPHRASE" type="password" placeholder="Min 8 chars" />
+                <Field
+                  name="password"
+                  label="SYS_PASSPHRASE"
+                  type="password"
+                  placeholder="Minimum 8 characters"
+                />
                 <Field name="submittedAmount" label="SYS_FEE_PAID" placeholder="e.g. 499" />
               </div>
 
@@ -123,6 +198,7 @@ export default function AuthPanel() {
                   </span>
                   <Input
                     id="paymentReceipt"
+                    name="paymentReceipt"
                     className="sr-only"
                     type="file"
                     accept="image/jpeg,image/jpg,image/png,image/webp"
@@ -131,6 +207,10 @@ export default function AuthPanel() {
                   />
                 </label>
               </div>
+
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Use a password with at least 8 characters. Receipt images must be JPG, PNG, or WEBP and under 5 MB.
+              </p>
 
               <Button className="w-full font-bold uppercase tracking-widest retro-btn-pink" size="lg" disabled={isLoading || !receipt}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
@@ -141,7 +221,7 @@ export default function AuthPanel() {
 
           {/* User Login Form */}
           <TabsContent value="login">
-            <form className="space-y-4" onSubmit={handleLogin}>
+            <form className="space-y-4" onSubmit={handleLogin} noValidate>
               <Field name="email" label="SYS_EMAIL" type="email" placeholder="email@address.com" />
               <Field name="password" label="SYS_PASSPHRASE" type="password" placeholder="Enter password" />
               <Button className="w-full font-bold uppercase tracking-widest retro-btn-cyan" size="lg" disabled={isLoading}>
@@ -152,16 +232,46 @@ export default function AuthPanel() {
           </TabsContent>
         </Tabs>
 
-        {/* Message Log Console */}
-        {statusMessage && (
-          <div className="mt-6 border border-primary/20 bg-[#16152b]/80 p-3 rounded font-mono text-[11px] text-green-400">
-            <div className="text-secondary font-bold mb-1 uppercase tracking-wider font-terminal">CONSOLE_LOG:</div>
-            <p className="leading-5">{statusMessage}</p>
-          </div>
-        )}
       </CardContent>
     </Card>
   );
+}
+
+type RegistrationValidationInput = {
+  name: string;
+  email: string;
+  password: string;
+  contact: string;
+  institution: string;
+  receipt: File;
+};
+
+function validateRegistrationInput({
+  name,
+  email,
+  password,
+  contact,
+  institution,
+  receipt,
+}: RegistrationValidationInput) {
+  if (name.trim().length < 2) return "Please enter your full name.";
+  if (!/^\S+@\S+\.\S+$/.test(email.trim())) return "Please enter a valid email address.";
+  if (password.length < 8) return "Password must be at least 8 characters long.";
+  if (!/^\+?[0-9]{10,15}$/.test(contact.trim())) {
+    return "Contact number must contain 10 to 15 digits only.";
+  }
+  if (institution.trim().length < 2) return "Please enter your institution name.";
+
+  const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+  if (!allowedTypes.includes(receipt.type)) {
+    return "Payment receipt must be a JPG, PNG, or WEBP image.";
+  }
+
+  if (receipt.size > 5 * 1024 * 1024) {
+    return "Payment receipt must be smaller than 5 MB.";
+  }
+
+  return null;
 }
 
 type FieldProps = {

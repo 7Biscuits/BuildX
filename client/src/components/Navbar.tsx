@@ -19,7 +19,7 @@ export default function Navbar() {
     await logout();
     navigate("/");
   }
-  const canAccessProfile = user?.role === "USER" && user.status === "VERIFIED";
+  const canAccessProfile = user?.role === "USER";
   const canAccessQuiz = user?.role === "USER" && user.status === "VERIFIED";
 
   return (

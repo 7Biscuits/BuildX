@@ -1,8 +1,7 @@
 import { useEffect } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import HomePage from "@/pages/HomePage";
 import QuizPage from "@/pages/QuizPage";
-import DashboardPage from "@/pages/DashboardPage";
 import AdminPage from "@/pages/AdminPage";
 import AdminLoginPage from "@/pages/AdminLoginPage";
 import LiveQuizSessionPage from "@/pages/LiveQuizSessionPage";
@@ -52,9 +51,7 @@ export default function App() {
         <Route
           path="/dashboard"
           element={
-            <ProtectedRoute role="USER" requireVerified>
-              <DashboardPage />
-            </ProtectedRoute>
+            <Navigate to="/profile" replace />
           }
         />
         <Route

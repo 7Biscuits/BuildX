@@ -51,7 +51,7 @@ export default function QuizPage() {
         
         <div className="absolute top-4 left-4">
           <Button asChild variant="ghost" size="sm" className="text-muted-foreground hover:text-white font-bold gap-1 font-terminal">
-            <Link to={user.role === "ADMIN" ? "/admin" : "/dashboard"}>
+            <Link to={user.role === "ADMIN" ? "/admin" : "/profile"}>
               <ArrowLeft className="h-4 w-4" />
               ABORT_TO_COCKPIT
             </Link>

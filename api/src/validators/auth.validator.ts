@@ -12,11 +12,7 @@ export const registerValidator = z.object({
   password: z
     .string()
     .min(8, "Password must be at least 8 characters long")
-    .max(100, "Password cannot exceed 100 characters")
-    .regex(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/,
-      "Password must contain at least one uppercase letter, one lowercase letter, and one number",
-    ),
+    .max(100, "Password cannot exceed 100 characters"),
 
   contact: z
     .string()
@@ -65,11 +61,7 @@ export const adminChangePasswordValidator = z.object({
   newPassword: z
     .string()
     .min(8, "Password must be at least 8 characters long")
-    .max(100, "Password cannot exceed 100 characters")
-    .regex(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/,
-      "Password must contain at least one uppercase letter, one lowercase letter, and one number",
-    ),
+    .max(100, "Password cannot exceed 100 characters"),
 });
 
 export type RegisterInput = z.infer<typeof registerValidator>;

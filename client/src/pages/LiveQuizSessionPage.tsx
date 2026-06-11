@@ -67,7 +67,7 @@ export default function LiveQuizSessionPage() {
         setHasJoined(true);
       } else if (hasJoined && session?.status !== "ENDED") {
         alert("You have been kicked from this quiz session by the host.");
-        navigate("/dashboard");
+        navigate("/profile");
       }
     }
   }, [participants, user, hasJoined, session?.status, navigate]);
@@ -774,7 +774,7 @@ export default function LiveQuizSessionPage() {
                 )}
 
                 <Button asChild size="sm" className="w-full font-bold uppercase tracking-widest text-xs h-9 retro-btn-cyan mt-4 bg-transparent">
-                  <Link to={user.role === "ADMIN" ? "/admin" : "/dashboard"}>
+                  <Link to={user.role === "ADMIN" ? "/admin" : "/profile"}>
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     RETURN_TO_COCKPIT
                   </Link>

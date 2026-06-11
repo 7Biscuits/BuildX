@@ -25,7 +25,7 @@ import { useAuthStore } from "@/store/authStore";
 import type { AuthUser, QuizResult } from "@/types/api";
 
 export default function ProfilePage() {
-  const { user, status } = useAuthStore();
+  const { user, status, message, clearMessage } = useAuthStore();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<AuthUser | null>(null);
   const [quizHistory, setQuizHistory] = useState<QuizResult[]>([]);
@@ -102,6 +102,23 @@ export default function ProfilePage() {
     isRejected && profile?.paymentVerification?.rejectionReason
       ? profile.paymentVerification.rejectionReason
       : null;
+  const verificationBadge = isVerified
+    ? {
+        tone: "verified" as const,
+        icon: <CheckCircle2 className="h-4 w-4" />,
+        label: "Verified",
+      }
+    : isRejected
+      ? {
+          tone: "rejected" as const,
+          icon: <XCircle className="h-4 w-4" />,
+          label: "Rejected",
+        }
+      : {
+          tone: "pending" as const,
+          icon: <Clock className="h-4 w-4" />,
+          label: "Pending",
+        };
 
   return (
     <div className="min-h-screen text-white font-terminal selection:bg-primary selection:text-white">
@@ -109,6 +126,22 @@ export default function ProfilePage() {
       <Navbar />
 
       <main className="container relative z-10 py-8">
+        {message ? (
+          <Card className="mb-6 border-emerald-500/30 bg-emerald-500/10">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-emerald-200">{message}</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-emerald-400/30 bg-transparent text-emerald-200 hover:bg-emerald-500/10"
+                onClick={clearMessage}
+              >
+                Dismiss
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
+
         {loading ? (
           <ProfileSkeleton />
         ) : error ? (
@@ -168,24 +201,11 @@ export default function ProfilePage() {
                         Payment Verification Status
                       </span>
                     </div>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <div className="mt-3">
                       <StatusBadge
-                        active={profile.status === "PENDING"}
-                        tone="pending"
-                        icon={<Clock className="h-4 w-4" />}
-                        label="Pending"
-                      />
-                      <StatusBadge
-                        active={isVerified}
-                        tone="verified"
-                        icon={<CheckCircle2 className="h-4 w-4" />}
-                        label="Verified"
-                      />
-                      <StatusBadge
-                        active={isRejected}
-                        tone="rejected"
-                        icon={<XCircle className="h-4 w-4" />}
-                        label="Rejected"
+                        tone={verificationBadge.tone}
+                        icon={verificationBadge.icon}
+                        label={verificationBadge.label}
                       />
                     </div>
                     {isRejected && rejectionReason ? (
@@ -292,31 +312,23 @@ export default function ProfilePage() {
 }
 
 function StatusBadge({
-  active,
   tone,
   icon,
   label,
 }: {
-  active: boolean;
   tone: "pending" | "verified" | "rejected";
   icon: ReactNode;
   label: string;
 }) {
-  const activeClass =
+  const toneClass =
     tone === "verified"
       ? "border-emerald-500/35 bg-emerald-500/12 text-emerald-300"
       : tone === "rejected"
         ? "border-rose-500/35 bg-rose-500/12 text-rose-300"
-        : "border-amber-500/35 bg-amber-500/12 text-amber-300";
+        : "border-sky-500/35 bg-sky-500/12 text-sky-300";
 
   return (
-    <div
-      className={`flex items-center gap-2 rounded border px-3 py-2 text-sm ${
-        active
-          ? activeClass
-          : "border-white/10 bg-white/5 text-muted-foreground"
-      }`}
-    >
+    <div className={`flex items-center gap-2 rounded border px-3 py-2 text-sm ${toneClass}`}>
       {icon}
       <span className="font-bold uppercase tracking-widest">{label}</span>
     </div>

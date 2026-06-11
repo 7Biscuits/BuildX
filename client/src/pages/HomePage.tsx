@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
+import { useAuthStore } from "@/store/authStore";
 
 const InstagramIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -71,6 +72,8 @@ const faqs = [
 export default function HomePage() {
   const [introDone, setIntroDone] = useState(false);
   const handleIntroDone = useCallback(() => setIntroDone(true), []);
+  const { user } = useAuthStore();
+  const showAuthPanel = !user;
 
   return (
     <div className="min-h-screen overflow-x-hidden text-white font-terminal selection:bg-primary selection:text-white">
@@ -80,7 +83,10 @@ export default function HomePage() {
 
       <main className="relative z-10">
         {/* HERO SECTION */}
-        <section id="home" className="container grid min-h-[calc(100vh-4rem)] items-center gap-10 py-12 lg:grid-cols-[1.1fr_0.9fr]">
+        <section
+          id="home"
+          className={`container grid min-h-[calc(100vh-4rem)] items-center gap-10 py-12 ${showAuthPanel ? "lg:grid-cols-[1.1fr_0.9fr]" : ""}`}
+        >
           <motion.div
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
@@ -100,7 +106,7 @@ export default function HomePage() {
             
             <div className="mt-8 flex flex-wrap gap-3 font-terminal">
               <Button asChild size="lg" className="retro-btn-pink font-bold uppercase tracking-widest">
-                <a href="#auth">CONNECT_PORTAL</a>
+                {showAuthPanel ? <a href="#auth">CONNECT_PORTAL</a> : <a href="#about">EXPLORE_EVENT</a>}
               </Button>
               <Button asChild size="lg" variant="outline" className="border-secondary/30 text-secondary hover:bg-secondary/10 hover:shadow-neon-cyan font-bold uppercase tracking-widest bg-transparent">
                 <a href="#about">EXAMINE_SPECS</a>
@@ -115,13 +121,15 @@ export default function HomePage() {
           </motion.div>
 
           {/* AUTH PANEL TABBED INTERFACE */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.55, delay: introDone ? 0.2 : 3.35 }}
-          >
-            <AuthPanel />
-          </motion.div>
+          {showAuthPanel ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.55, delay: introDone ? 0.2 : 3.35 }}
+            >
+              <AuthPanel />
+            </motion.div>
+          ) : null}
         </section>
 
         {/* DETAILS SECTION */}

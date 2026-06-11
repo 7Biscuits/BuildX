@@ -24,15 +24,7 @@ export async function register(payload: RegisterPayload): Promise<ApiEnvelope<Au
   }
   formData.append("paymentReceipt", payload.paymentReceipt);
 
-  const response = await api.post<ApiEnvelope<AuthUser>>(
-    "/api/auth/register",
-    formData,
-    {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    }
-  );
+  const response = await api.post<ApiEnvelope<AuthUser>>("/api/auth/register", formData);
   return response.data;
 }
 

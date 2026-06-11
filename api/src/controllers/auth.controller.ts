@@ -116,7 +116,6 @@ export const register = async (
         });
       });
 
-      setAuthCookie(res, createAuthToken(user.id, user.role));
       return ok(res, user, "Payment receipt resubmitted. Verification is pending.");
     }
 
@@ -148,8 +147,7 @@ export const register = async (
       select: userResponseSelect,
     });
 
-    setAuthCookie(res, createAuthToken(user.id, user.role));
-    return created(res, user, "Account created. Payment verification is pending.");
+    return created(res, user, "User registered successfully. Payment verification is pending.");
   } catch (error) {
     logger.error("REGISTER_ERROR", { error });
 
@@ -189,14 +187,6 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
 
     if (user.role === UserRole.ADMIN) {
       return fail(res, 403, "Please use the admin login route");
-    }
-
-    if (user.status === AccountStatus.REJECTED) {
-      return fail(res, 403, "Payment verification was rejected. Please resubmit a valid receipt.");
-    }
-
-    if (user.status !== AccountStatus.VERIFIED) {
-      return fail(res, 403, "Account not verified by admin yet");
     }
 
     const token = jwt.sign(
@@ -281,6 +271,15 @@ export const registerAdmin = async (
     return created(res, admin, "Admin account created successfully");
   } catch (error) {
     logger.error("ADMIN_REGISTER_ERROR", { error });
+
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2002"
+    ) {
+      return fail(res, 409, "Admin account already exists");
+    }
 
     return fail(res, 500, "Internal server error");
   }

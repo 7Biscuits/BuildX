@@ -12,7 +12,7 @@ const envSchema = z.object({
     .transform((value) =>
       value
         .split(",")
-        .map((origin) => origin.trim())
+        .map((origin) => stripWrappingQuotes(origin))
         .filter(Boolean),
     ),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),

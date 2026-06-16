@@ -1,4 +1,4 @@
-import { LayoutGrid, ShieldCheck, Users, UserCog, Settings } from "lucide-react";
+import { LayoutGrid, ShieldCheck, Users, UserCog, Settings, Gamepad2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AdminSection } from "@/store/adminDashboardStore";
 
@@ -6,6 +6,7 @@ const items: { id: AdminSection; label: string; icon: typeof LayoutGrid }[] = [
   { id: "overview", label: "Overview", icon: LayoutGrid },
   { id: "verifications", label: "Pending Verifications", icon: ShieldCheck },
   { id: "users", label: "User Management", icon: Users },
+  { id: "quizzes", label: "Quiz Creator", icon: Gamepad2 },
   { id: "admin", label: "Admin Management", icon: UserCog },
   { id: "settings", label: "Settings / Profile", icon: Settings },
 ];

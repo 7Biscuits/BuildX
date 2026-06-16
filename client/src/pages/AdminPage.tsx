@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/store/authStore";
 import { useAdminDashboardStore } from "@/store/adminDashboardStore";
 import type { AccountStatus, AdminManagedUser, PaymentVerification } from "@/types/api";
+import { AdminQuizzes } from "@/components/admin/AdminQuizzes";
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -319,6 +320,11 @@ export default function AdminPage() {
                           onClick={() => setActiveSection("users")}
                         />
                         <QuickAction
+                          title="Manage Quizzes & Sessions"
+                          description="Create new draft quizzes, add questions, finalize, and spin live rooms."
+                          onClick={() => setActiveSection("quizzes")}
+                        />
+                        <QuickAction
                           title="Open admin settings"
                           description="Update your own admin profile details."
                           onClick={() => setActiveSection("settings")}
@@ -496,6 +502,16 @@ export default function AdminPage() {
                       <PermissionRow text="User deletions archive the deleted email in deletedUsers." />
                     </CardContent>
                   </Card>
+                </div>
+              ) : null}
+
+              {activeSection === "quizzes" ? (
+                <div className="space-y-4">
+                  <SectionHeader
+                    title="Quiz Creator & Host Workspace"
+                    description="Create new draft quizzes, inject questions/options, finalize structures, and spin up live session lobbies."
+                  />
+                  <AdminQuizzes />
                 </div>
               ) : null}
 

@@ -13,6 +13,7 @@ export type AdminSection =
   | "verifications"
   | "users"
   | "admin"
+  | "quizzes"
   | "settings";
 
 type AdminDashboardState = {
@@ -140,10 +141,21 @@ export const useAdminDashboardStore = create<AdminDashboardState>((set, get) => 
 
     try {
       const filters = get().userFilters;
-      const response = await adminUserApi.searchUsers({
-        ...filters,
-        status: (filters.status as AccountStatus | "") || "",
-      });
+      const cleanParams: Record<string, string> = {};
+      if (filters.status) {
+        cleanParams.status = filters.status;
+      }
+      if (filters.query && filters.query.trim() !== "") {
+        cleanParams.query = filters.query.trim();
+      }
+      if (filters.name && filters.name.trim() !== "") {
+        cleanParams.name = filters.name.trim();
+      }
+      if (filters.institution && filters.institution.trim() !== "") {
+        cleanParams.institution = filters.institution.trim();
+      }
+
+      const response = await adminUserApi.searchUsers(cleanParams);
 
       set({
         users: response.data ?? [],

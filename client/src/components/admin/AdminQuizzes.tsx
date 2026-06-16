@@ -15,7 +15,8 @@ import {
   Timer,
   ListOrdered,
   AlertTriangle,
-  HelpCircle
+  HelpCircle,
+  Users
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,12 +55,32 @@ export function AdminQuizzes() {
   const [leaderboardDisplayLimit, setLeaderboardDisplayLimit] = useState(10);
   const [finalizeError, setFinalizeError] = useState<string | null>(null);
   const [finalizeLoading, setFinalizeLoading] = useState(false);
+  const [finalizeSuccess, setFinalizeSuccess] = useState(false);
 
   // Live session state
   const [sessionLoading, setSessionLoading] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [liveSession, setLiveSession] = useState<QuizSessionState | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Session results modal state
+  const [resultsModalOpen, setResultsModalOpen] = useState(false);
+  const [resultsSessionCode, setResultsSessionCode] = useState("");
+  const [resultsList, setResultsList] = useState<any[]>([]);
+  const [resultsLoading, setResultsLoading] = useState(false);
+  const [resultsError, setResultsError] = useState<string | null>(null);
+
+  // Watch selected quiz to initialize specs form
+  useEffect(() => {
+    if (selectedQuiz) {
+      setDurationMinutes(selectedQuiz.durationMinutes ?? 15);
+      setLeaderboardDisplayLimit(selectedQuiz.leaderboardDisplayLimit ?? 10);
+      setFinalizeError(null);
+      setFinalizeSuccess(false);
+    } else {
+      setFinalizeSuccess(false);
+    }
+  }, [selectedQuiz]);
 
   // Load quizzes on mount
   useEffect(() => {
@@ -207,12 +228,15 @@ export function AdminQuizzes() {
     try {
       setFinalizeLoading(true);
       setFinalizeError(null);
+      setFinalizeSuccess(false);
       const res = await quizApi.finalizeQuiz(selectedQuiz.id, {
         durationMinutes,
         leaderboardDisplayLimit,
       });
 
       if (res.success && res.data) {
+        setFinalizeSuccess(true);
+        setTimeout(() => setFinalizeSuccess(false), 3000);
         // Refresh state
         const quizzesRes = await quizApi.getAdminQuizzes();
         if (quizzesRes.success && quizzesRes.data) {
@@ -227,6 +251,27 @@ export function AdminQuizzes() {
       setFinalizeError(err.response?.data?.message || err.message || "Failed to finalize quiz.");
     } finally {
       setFinalizeLoading(false);
+    }
+  }
+
+  // Handle loading session results
+  async function handleLoadResults(sessionId: string, joinCode: string) {
+    try {
+      setResultsLoading(true);
+      setResultsError(null);
+      setResultsSessionCode(joinCode);
+      setResultsModalOpen(true);
+      
+      const res = await quizApi.getLeaderboard(sessionId);
+      if (res.success && res.data) {
+        setResultsList(res.data.leaderboard);
+      } else {
+        setResultsError(res.message || "Failed to load results.");
+      }
+    } catch (err: any) {
+      setResultsError(err.response?.data?.message || err.message || "Failed to load results.");
+    } finally {
+      setResultsLoading(false);
     }
   }
 
@@ -691,112 +736,290 @@ export function AdminQuizzes() {
                       )}
                     </CardContent>
                   </Card>
-                </div>
 
-                {/* COLUMN B: CONFIGURATION PANEL (DRAFT ONLY) */}
-                <div className="space-y-5">
-                  {selectedQuiz.status === "DRAFT" ? (
-                    <Card className="border-white/10 bg-[#0d1018]/92 shadow-terminal">
+                  {/* SESSION HISTORY CARD (ONLY SHOWN IF READY STATUS AND SESSIONS EXIST) */}
+                  {selectedQuiz.status === "READY" && selectedQuiz.sessions && selectedQuiz.sessions.length > 0 && (
+                    <Card className="border-white/10 bg-[#0d1018]/92 shadow-terminal mt-5">
                       <CardHeader className="border-b border-white/10">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <Timer className="h-4 w-4 text-cyan-400" />
-                          Finalize Quiz Configuration
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Users className="h-4.5 w-4.5 text-cyan-400" />
+                          Session History & Standings
                         </CardTitle>
+                        <CardDescription className="text-xs">
+                          Inspect past deployed game sessions, check passcodes, and load player scoreboards.
+                        </CardDescription>
                       </CardHeader>
                       <CardContent className="pt-6">
-                        <form onSubmit={handleFinalizeQuiz} className="space-y-4">
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                              Duration (Minutes)
-                            </label>
-                            <Input
-                              type="number"
-                              min={1}
-                              max={240}
-                              value={durationMinutes}
-                              onChange={(e) => setDurationMinutes(Number(e.target.value))}
-                              className="h-10 border-white/10 bg-white/5 text-white"
-                            />
-                            <p className="text-[10px] text-slate-500">
-                              Time limit for gameplay execution in live session.
-                            </p>
-                          </div>
+                        <div className="space-y-3">
+                          {selectedQuiz.sessions.map((sess) => {
+                            const dateStr = sess.startedAt
+                              ? new Date(sess.startedAt).toLocaleString()
+                              : "Not started";
+                            const isEnded = sess.status === "ENDED";
+                            const isRunning = sess.status === "RUNNING";
 
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                              Leaderboard Display Limit
-                            </label>
-                            <Input
-                              type="number"
-                              min={1}
-                              max={100}
-                              value={leaderboardDisplayLimit}
-                              onChange={(e) => setLeaderboardDisplayLimit(Number(e.target.value))}
-                              className="h-10 border-white/10 bg-white/5 text-white"
-                            />
-                            <p className="text-[10px] text-slate-500">
-                              Number of top participants to list on public screens.
-                            </p>
-                          </div>
+                            return (
+                              <div
+                                key={sess.id}
+                                className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 border border-white/5 bg-white/2 rounded-md"
+                              >
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-sm font-bold text-white">
+                                      ROOM: {sess.joinCode}
+                                    </span>
+                                    <span
+                                      className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                                        isEnded
+                                          ? "border-slate-500/30 bg-slate-500/10 text-slate-400"
+                                          : isRunning
+                                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 animate-pulse"
+                                          : "border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
+                                      }`}
+                                    >
+                                      {sess.status}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-500 font-mono">
+                                    Started: {dateStr}
+                                  </p>
+                                </div>
 
-                          {finalizeError && (
-                            <div className="rounded-md border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-xs text-rose-300">
-                              {finalizeError}
-                            </div>
-                          )}
-
-                          <Button
-                            type="submit"
-                            disabled={finalizeLoading || !selectedQuiz.questions || selectedQuiz.questions.length === 0}
-                            className="w-full bg-cyan-500 text-slate-950 hover:bg-cyan-600 hover:text-white font-semibold font-mono text-xs py-2.5 h-auto shadow-[0_0_12px_rgba(49,186,245,0.4)] disabled:opacity-50 disabled:pointer-events-none uppercase tracking-widest"
-                          >
-                            {finalizeLoading ? "Deploying..." : "Finalize & Ready Quiz"}
-                          </Button>
-
-                          {(!selectedQuiz.questions || selectedQuiz.questions.length === 0) && (
-                            <p className="text-[10px] text-rose-400 font-mono text-center">
-                              * Add at least 1 question item to enable finalization.
-                            </p>
-                          )}
-                        </form>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <Card className="border-white/10 bg-[#0d1018]/92 shadow-terminal">
-                      <CardHeader className="border-b border-white/10">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <Award className="h-4 w-4 text-cyan-400" />
-                          Quiz Specifications
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="pt-6 space-y-4 text-xs font-mono text-slate-300">
-                        <div className="flex justify-between border-b border-white/5 pb-2">
-                          <span className="text-slate-500">Duration:</span>
-                          <span className="text-white font-semibold">{selectedQuiz.durationMinutes ?? "--"} Minutes</span>
-                        </div>
-                        <div className="flex justify-between border-b border-white/5 pb-2">
-                          <span className="text-slate-500">Leaderboard Limit:</span>
-                          <span className="text-white font-semibold">{selectedQuiz.leaderboardDisplayLimit} Rows</span>
-                        </div>
-                        <div className="flex justify-between border-b border-white/5 pb-2">
-                          <span className="text-slate-500">Status:</span>
-                          <span className="text-cyan-400 font-semibold">{selectedQuiz.status}</span>
-                        </div>
-                        <div className="flex justify-between pb-1">
-                          <span className="text-slate-500">UUID:</span>
-                          <span className="text-[9px] text-slate-400 max-w-[150px] truncate" title={selectedQuiz.id}>
-                            {selectedQuiz.id}
-                          </span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {(isEnded || isRunning) ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleLoadResults(sess.id, sess.joinCode)}
+                                      className="h-8 text-xs border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300 font-mono"
+                                    >
+                                      View Scoreboard
+                                    </Button>
+                                  ) : (
+                                    <Link to={`/quiz/session/${sess.id}`}>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        className="h-8 text-xs bg-yellow-500 text-slate-950 hover:bg-yellow-600 font-mono font-semibold"
+                                      >
+                                        Enter Lobby
+                                      </Button>
+                                    </Link>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </CardContent>
                     </Card>
                   )}
+                </div>
+
+                {/* COLUMN B: CONFIGURATION PANEL */}
+                <div className="space-y-5">
+                  <Card className="border-white/10 bg-[#0d1018]/92 shadow-terminal">
+                    <CardHeader className="border-b border-white/10">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Timer className="h-4 w-4 text-cyan-400" />
+                        {selectedQuiz.status === "DRAFT" ? "Finalize Quiz Configuration" : "Update Quiz Specifications"}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-6">
+                      <form onSubmit={handleFinalizeQuiz} className="space-y-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                            Duration (Minutes)
+                          </label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={240}
+                            value={durationMinutes}
+                            onChange={(e) => setDurationMinutes(Number(e.target.value))}
+                            className="h-10 border-white/10 bg-white/5 text-white"
+                          />
+                          <p className="text-[10px] text-slate-500">
+                            Time limit for gameplay execution in live session. All users get this duration.
+                          </p>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                            Leaderboard Display Limit
+                          </label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={leaderboardDisplayLimit}
+                            onChange={(e) => setLeaderboardDisplayLimit(Number(e.target.value))}
+                            className="h-10 border-white/10 bg-white/5 text-white"
+                          />
+                          <p className="text-[10px] text-slate-500">
+                            Number of top participants to list on public screens.
+                          </p>
+                        </div>
+
+                        {finalizeError && (
+                          <div className="rounded-md border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-xs text-rose-300">
+                            {finalizeError}
+                          </div>
+                        )}
+
+                        {finalizeSuccess && (
+                          <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-300 font-mono text-center">
+                            ✓ Specifications updated.
+                          </div>
+                        )}
+
+                        <Button
+                          type="submit"
+                          disabled={finalizeLoading || (selectedQuiz.status === "DRAFT" && (!selectedQuiz.questions || selectedQuiz.questions.length === 0))}
+                          className="w-full bg-cyan-500 text-slate-950 hover:bg-cyan-600 hover:text-white font-semibold font-mono text-xs py-2.5 h-auto shadow-[0_0_12px_rgba(49,186,245,0.4)] disabled:opacity-50 disabled:pointer-events-none uppercase tracking-widest"
+                        >
+                          {finalizeLoading
+                            ? "Compiling..."
+                            : selectedQuiz.status === "DRAFT"
+                            ? "Finalize & Ready Quiz"
+                            : "Update Timer & Limits"}
+                        </Button>
+
+                        {selectedQuiz.status === "DRAFT" && (!selectedQuiz.questions || selectedQuiz.questions.length === 0) && (
+                          <p className="text-[10px] text-rose-400 font-mono text-center">
+                            * Add at least 1 question item to enable finalization.
+                          </p>
+                        )}
+                      </form>
+                    </CardContent>
+                  </Card>
                 </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {/* SESSION RESULTS MODAL */}
+      <AnimatePresence>
+        {resultsModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-3xl rounded-lg border border-cyan-500/30 bg-[#0d1018] shadow-[0_0_30px_rgba(49,186,245,0.15)] overflow-hidden font-mono text-white max-h-[90vh] flex flex-col"
+            >
+              {/* CRT Scanline effect */}
+              <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_120%,rgba(13,16,24,0.1),rgba(7,6,12,0.6))] z-10" />
+
+              {/* Header */}
+              <div className="border-b border-white/10 bg-[#0f0e20]/80 p-5 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2 text-cyan-400">
+                  <Award className="h-5 w-5 animate-pulse" />
+                  <h3 className="font-bold text-lg tracking-wider">
+                    SESSION_RESULTS_LOG: {resultsSessionCode}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setResultsModalOpen(false)}
+                  className="text-slate-400 hover:text-white transition text-sm font-bold uppercase tracking-wider"
+                >
+                  [ CLOSE ]
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                {resultsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                    <span className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
+                    <span className="text-xs font-mono text-cyan-400 animate-pulse">COMPILING SCOREBOARD...</span>
+                  </div>
+                ) : resultsError ? (
+                  <div className="p-4 rounded border border-rose-500/20 bg-rose-500/10 text-xs text-rose-400">
+                    {resultsError}
+                  </div>
+                ) : resultsList.length === 0 ? (
+                  <div className="text-center py-20 text-slate-500 text-sm">
+                    [ NO CONTESTANTS DETECTED OR COMPLETED IN THIS SESSION ]
+                  </div>
+                ) : (
+                  <div className="rounded border border-white/10 bg-black/40 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-white/10 bg-white/5 uppercase tracking-wider text-slate-400 text-[10px]">
+                            <th className="p-3 font-semibold text-center w-16">Rank</th>
+                            <th className="p-3 font-semibold">User</th>
+                            <th className="p-3 font-semibold">Email</th>
+                            <th className="p-3 font-semibold text-center w-24">Score</th>
+                            <th className="p-3 font-semibold text-center w-24">Ratio</th>
+                            <th className="p-3 font-semibold text-center w-28">Duration</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5 font-mono">
+                          {resultsList.map((res) => {
+                            const isPodium = res.rank <= 3;
+                            const podiumColor =
+                              res.rank === 1
+                                ? "text-yellow-400"
+                                : res.rank === 2
+                                ? "text-slate-300"
+                                : "text-amber-600";
+
+                            return (
+                              <tr
+                                key={res.id}
+                                className={`transition hover:bg-white/2 ${
+                                  isPodium ? "bg-cyan-500/2" : ""
+                                }`}
+                              >
+                                <td className="p-3 text-center font-bold">
+                                  {isPodium ? (
+                                    <span className={`inline-flex items-center gap-1 ${podiumColor}`}>
+                                      ★ {res.rank}
+                                    </span>
+                                  ) : (
+                                    res.rank
+                                  )}
+                                </td>
+                                <td className="p-3 font-semibold text-white">
+                                  {res.user?.name || "Anonymous"}
+                                </td>
+                                <td className="p-3 text-slate-400">
+                                  {res.user?.email || "--"}
+                                </td>
+                                <td className="p-3 text-center text-cyan-400 font-bold">
+                                  {res.score}
+                                </td>
+                                <td className="p-3 text-center text-slate-300">
+                                  {Math.round(res.percentage)}%
+                                </td>
+                                <td className="p-3 text-center text-slate-400">
+                                  {res.durationSeconds}s
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="border-t border-white/10 bg-[#0f0e20]/40 p-4 flex justify-between items-center text-[10px] text-slate-500 shrink-0">
+                <span>TOTAL_PARTICIPANTS: {resultsList.length}</span>
+                <span>SYSTEM_COMPILE_OK</span>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

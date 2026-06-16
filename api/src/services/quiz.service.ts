@@ -56,7 +56,6 @@ export const createQuizSessionForAdmin = async (
   const quiz = await prisma.quiz.findFirst({
     where: {
       id: quizId,
-      createdByAdminId: hostAdminId,
       status: QuizStatus.READY,
     },
   });
@@ -324,7 +323,7 @@ export const getSessionState = async (sessionId: string) => {
   });
 };
 
-export const getLeaderboard = async (sessionId: string) => {
+export const getLeaderboard = async (sessionId: string, ignoreLimit = false) => {
   const session = await prisma.quizSession.findUnique({
     where: { id: sessionId },
   });
@@ -336,7 +335,7 @@ export const getLeaderboard = async (sessionId: string) => {
       quiz: { select: { id: true, title: true } },
     },
     orderBy: [{ rank: "asc" }],
-    take: session?.leaderboardDisplayLimit ?? 10,
+    take: ignoreLimit ? undefined : (session?.leaderboardDisplayLimit ?? 10),
   });
 
   return { sessionId, leaderboard: results };

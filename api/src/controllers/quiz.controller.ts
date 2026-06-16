@@ -58,9 +58,8 @@ export const addQuestion = async (req: Request, res: Response) => {
       return validationFail(res, bodyParsed.error);
     }
 
-    const adminId = req.user!.userId;
     const quiz = await prisma.quiz.findFirst({
-      where: { id: idParsed.data.id, createdByAdminId: adminId, status: QuizStatus.DRAFT },
+      where: { id: idParsed.data.id, status: QuizStatus.DRAFT },
       include: { questions: true },
     });
 
@@ -104,9 +103,8 @@ export const finalizeQuiz = async (req: Request, res: Response) => {
       return validationFail(res, bodyParsed.error);
     }
 
-    const adminId = req.user!.userId;
     const quiz = await prisma.quiz.findFirst({
-      where: { id: idParsed.data.id, createdByAdminId: adminId },
+      where: { id: idParsed.data.id },
       include: { questions: { include: { options: true } } },
     });
 
@@ -230,7 +228,8 @@ export const getSessionLeaderboard = async (req: Request, res: Response) => {
     const user = req.user!;
     const canAccess = await assertSessionAccess(parsed.data.id, user.userId, user.role);
     if (!canAccess) return fail(res, 403, "Forbidden");
-    const leaderboard = await getLeaderboard(parsed.data.id);
+    const isAdmin = user.role === UserRole.ADMIN;
+    const leaderboard = await getLeaderboard(parsed.data.id, isAdmin);
     return ok(res, leaderboard);
   } catch {
     return fail(res, 500, "Failed to fetch leaderboard");
@@ -252,7 +251,6 @@ export const listMyQuizzes = async (req: Request, res: Response) => {
     return fail(res, 403, "Admins only");
   }
   const quizzes = await prisma.quiz.findMany({
-    where: { createdByAdminId: user.userId },
     include: { questions: { include: { options: true } }, sessions: true },
     orderBy: { createdAt: "desc" },
   });

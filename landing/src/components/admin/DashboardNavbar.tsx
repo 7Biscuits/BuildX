@@ -12,12 +12,12 @@ export function DashboardNavbar({ admin, onLogout }: DashboardNavbarProps) {
     <header className="rounded-lg border border-white/10 bg-[#0d1018]/92 px-4 py-4 shadow-terminal">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          {/* <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-secondary">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-secondary">
             Protected Route
-          </p> */}
+          </p>
           <h1 className="mt-1 text-2xl font-semibold text-white">Admin Dashboard</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Review verifications, manage users, and quiz system.
+            Review verifications, manage users, and keep admin access tidy.
           </p>
         </div>
 

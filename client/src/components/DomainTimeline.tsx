@@ -239,7 +239,7 @@ export default function DomainTimeline() {
           <motion.div
             key="expanded"
             layoutId={`domain-card-${activeDomain}`}
-            className={`w-full rounded-md border bg-[#07050d]/95 p-6 md:p-8 relative min-h-[500px] border-opacity-80 crt-screen ${domainData[activeDomain].color} ${domainData[activeDomain].glowColor}`}
+            className={`w-full rounded-md border bg-[#07050d]/95 p-4 sm:p-6 md:p-8 relative min-h-[500px] border-opacity-80 crt-screen ${domainData[activeDomain].color} ${domainData[activeDomain].glowColor}`}
           >
             {/* Close button */}
             <button
@@ -249,32 +249,32 @@ export default function DomainTimeline() {
             >
               <X className="h-5 w-5" />
             </button>
-
+ 
             {/* Header info */}
-            <div className="flex items-center gap-4 mb-8 border-b border-primary/10 pb-6">
+            <div className="flex items-center gap-3 sm:gap-4 mb-8 border-b border-primary/10 pb-6 pr-10 sm:pr-0">
               <motion.div 
                 layoutId={`domain-icon-container-${activeDomain}`}
-                className={`flex h-14 w-14 items-center justify-center border rounded ${domainData[activeDomain].accentBg} ${domainData[activeDomain].color}`}
+                className={`flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center border rounded ${domainData[activeDomain].accentBg} ${domainData[activeDomain].color}`}
               >
                 {(() => {
                   const Icon = domainData[activeDomain].icon;
-                  return <Icon className="h-7 w-7" />;
+                  return <Icon className="h-6 w-6 sm:h-7 sm:w-7" />;
                 })()}
               </motion.div>
-
+ 
               <div>
                 <motion.h2 
                   layoutId={`domain-title-${activeDomain}`}
-                  className="font-display text-3xl font-bold text-white tracking-widest uppercase"
+                  className="font-display text-lg sm:text-2xl md:text-3xl font-bold text-white tracking-wider sm:tracking-widest uppercase"
                 >
                   {domainData[activeDomain].title}
                 </motion.h2>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">
+                <p className="text-[8px] sm:text-[10px] text-muted-foreground uppercase tracking-widest mt-1">
                   SECURE_DOMAIN_ENVIRONMENT // STATE_DESTRUCT_COMPILED
                 </p>
               </div>
             </div>
-
+ 
             {/* Content Switcher depending on Domain Type */}
             {activeDomain !== "hackathon" ? (
               // NON-HACKATHON DOMAINS (Web, Game, AI/ML)
@@ -282,19 +282,19 @@ export default function DomainTimeline() {
                 {/* Curriculum & Day navigation */}
                 <div className="space-y-6">
                   {/* Day selection tabs */}
-                  <div className="flex gap-3">
+                  <div className="flex flex-wrap gap-2">
                     {(["day1", "day2"] as const).map((day) => (
                       <button
                         key={day}
                         onClick={() => setSelectedDay(day)}
-                        className={`px-5 py-2 font-bold tracking-widest text-xs uppercase border rounded transition-all duration-200 flex items-center gap-2 ${
+                        className={`px-3 py-1.5 sm:px-5 sm:py-2 font-bold tracking-wider sm:tracking-widest text-[10px] sm:text-xs uppercase border rounded transition-all duration-200 flex items-center gap-1.5 sm:gap-2 ${
                           selectedDay === day
                             ? `bg-primary text-white ${domainData[activeDomain].color}`
                             : "border-primary/20 text-muted-foreground hover:text-white bg-transparent"
                         }`}
                       >
-                        <Calendar className="h-3.5 w-3.5" />
-                        {day === "day1" ? "DAY_01_SPECS" : "DAY_02_SPECS"}
+                        <Calendar className="h-3.5 w-3.5 hidden xs:inline" />
+                        <span>{day === "day1" ? "DAY 01" : "DAY 02"}</span>
                       </button>
                     ))}
                   </div>
@@ -367,25 +367,26 @@ export default function DomainTimeline() {
               // EXPANDED HACKATHON DOMAIN
               <div className="space-y-6">
                 {/* Hackathon sub-tabs navigation */}
-                <div className="flex flex-wrap gap-2.5">
+                <div className="flex flex-wrap gap-2">
                   {[
-                    { id: "problems", label: "PROBLEM_STATEMENTS", icon: Shield },
-                    { id: "schedule", label: "SCHEDULE_CHRONO", icon: Calendar },
-                    { id: "activities", label: "DAY_NIGHT_ACTIVITIES", icon: Flame }
+                    { id: "problems", label: "PROBLEM_STATEMENTS", shortLabel: "PROBLEMS", icon: Shield },
+                    { id: "schedule", label: "SCHEDULE_CHRONO", shortLabel: "SCHEDULE", icon: Calendar },
+                    { id: "activities", label: "DAY_NIGHT_ACTIVITIES", shortLabel: "ACTIVITIES", icon: Flame }
                   ].map((tab) => {
                     const TabIcon = tab.icon;
                     return (
                       <button
                         key={tab.id}
                         onClick={() => setActiveHackathonTab(tab.id as any)}
-                        className={`px-5 py-2 font-bold tracking-widest text-xs uppercase border rounded transition-all duration-200 flex items-center gap-2 ${
+                        className={`px-3 py-1.5 sm:px-5 sm:py-2 font-bold tracking-wider sm:tracking-widest text-[10px] sm:text-xs uppercase border rounded transition-all duration-200 flex items-center gap-1.5 sm:gap-2 ${
                           activeHackathonTab === tab.id
                             ? "bg-primary text-white border-neon-pink shadow-pink"
                             : "border-primary/20 text-muted-foreground hover:text-white bg-transparent"
                         }`}
                       >
-                        <TabIcon className="h-3.5 w-3.5" />
-                        {tab.label}
+                        <TabIcon className="h-3.5 w-3.5 hidden xs:inline" />
+                        <span className="hidden sm:inline">{tab.label}</span>
+                        <span className="sm:hidden">{tab.shortLabel}</span>
                       </button>
                     );
                   })}

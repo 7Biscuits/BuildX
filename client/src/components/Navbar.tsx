@@ -1,7 +1,7 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
-import { LogOut, ShieldAlert, Gamepad2, UserRound, Lock } from "lucide-react";
+import { LogOut, ShieldAlert, Gamepad2, UserRound, Lock, Users } from "lucide-react";
 
 export default function Navbar() {
   const { user, logout } = useAuthStore();
@@ -28,7 +28,7 @@ export default function Navbar() {
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 font-display text-xl font-bold text-neon-pink">
           <img src="/images/cobit_logo.png" alt="Cobit labs Logo" className="h-9 w-auto object-contain" />
-          <span className="tracking-wider text-white">Cobit labs</span>
+          <span className="tracking-wider text-white hidden sm:inline">Cobit labs</span>
         </Link>
 
         {/* Navigation links */}
@@ -71,6 +71,13 @@ export default function Navbar() {
 
         {/* Auth profile widget / Register button */}
         <div className="flex items-center gap-3 font-terminal">
+          <Button asChild size="sm" variant="outline" className="border-primary/60 text-primary hover:bg-primary/10 hover:text-primary hover:shadow-neon-pink transition-all">
+            <Link to="/team" className="flex items-center gap-1.5">
+              <Users className="h-4 w-4 animate-pulse" />
+              <span><span className="hidden sm:inline">BUILDX </span>TEAM</span>
+            </Link>
+          </Button>
+
           {user ? (
             <div className="flex items-center gap-3">
               <span className="hidden text-xs text-muted-foreground sm:inline-block">
@@ -88,7 +95,7 @@ export default function Navbar() {
                 <Button asChild size="sm" variant="outline" className="border-secondary text-secondary hover:bg-secondary/10 hover:shadow-neon-cyan">
                   <Link to="/profile" className="flex items-center gap-1">
                     <UserRound className="h-4 w-4" />
-                    GO TO PROFILE
+                    <span><span className="hidden sm:inline">GO TO </span>PROFILE</span>
                   </Link>
                 </Button>
               ) : (
@@ -99,7 +106,7 @@ export default function Navbar() {
                   disabled
                 >
                   <Lock className="h-4 w-4" />
-                  GO TO PROFILE
+                  <span><span className="hidden sm:inline">GO TO </span>PROFILE</span>
                 </Button>
               )}
 
@@ -120,7 +127,7 @@ export default function Navbar() {
               disabled
             >
               <Lock className="mr-1 h-4 w-4" />
-              GO TO PROFILE
+              <span><span className="hidden sm:inline">GO TO </span>PROFILE</span>
             </Button>
           )}
         </div>

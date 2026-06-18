@@ -6,6 +6,7 @@ import AdminPage from "@/pages/AdminPage";
 import AdminLoginPage from "@/pages/AdminLoginPage";
 import LiveQuizSessionPage from "@/pages/LiveQuizSessionPage";
 import ContactsPage from "@/pages/ContactsPage";
+import TeamPage from "@/pages/TeamPage";
 import ProfilePage from "@/pages/ProfilePage";
 import VerificationPendingPage from "@/pages/VerificationPendingPage";
 import { useAuthStore } from "@/store/authStore";
@@ -79,6 +80,7 @@ export default function App() {
           }
         />
         <Route path="/contact" element={<ContactsPage />} />
+        <Route path="/team" element={<TeamPage />} />
       </Routes>
     </>
   );

@@ -5,11 +5,13 @@ import {
   AccountStatus,
   VerificationStatus,
 } from "../../generated/prisma/client";
+import { logger } from "../lib/logger";
 import { idValidator } from "../validators/id.validator";
 import {
   approvePaymentValidator,
   rejectPaymentValidator,
 } from "../validators/admin.user.validator";
+import { deletePaymentSlipByPublicUrl, StorageDeleteError } from "../utils/upload.util";
 import { fail, ok, validationFail } from "../utils/http";
 
 const paymentWithUserInclude = {
@@ -137,23 +139,60 @@ export const rejectPayment = async (req: Request, res: Response) => {
     }
     const reason = bodyParsed.data.reason || "Not Specified";
 
+    const existingPayment = await prisma.paymentVerification.findFirst({
+      where: {
+        id: paymentId,
+        status: VerificationStatus.PENDING,
+      },
+      select: {
+        id: true,
+        paymentSlipUrl: true,
+        userId: true,
+      },
+    });
+
+    if (!existingPayment) {
+      return fail(res, 404, "Pending payment not found");
+    }
+
+    try {
+      await deletePaymentSlipByPublicUrl(existingPayment.paymentSlipUrl);
+    } catch (error) {
+      logger.error("PAYMENT_SLIP_DELETE_ON_REJECTION_FAILED", {
+        paymentId,
+        userId: existingPayment.userId,
+        error,
+      });
+
+      if (error instanceof StorageDeleteError) {
+        return fail(res, error.statusCode, error.message);
+      }
+
+      return fail(res, 500, "Failed to delete payment slip");
+    }
+
     const payment = await prisma.$transaction(async (tx) => {
-      const updatedPayment = await tx.paymentVerification.update({
+      const updateResult = await tx.paymentVerification.updateMany({
         where: {
           id: paymentId,
           status: VerificationStatus.PENDING,
         },
         data: {
           status: VerificationStatus.REJECTED,
+          paymentSlipUrl: null,
           verifiedAt: new Date(),
           verifiedByAdminId: adminId,
           rejectionReason: reason,
         },
       });
 
+      if (updateResult.count === 0) {
+        throw new Error("Pending payment not found");
+      }
+
       await tx.user.update({
         where: {
-          id: updatedPayment.userId,
+          id: existingPayment.userId,
         },
         data: {
           status: AccountStatus.REJECTED,
@@ -162,7 +201,7 @@ export const rejectPayment = async (req: Request, res: Response) => {
 
       return tx.paymentVerification.findUniqueOrThrow({
         where: {
-          id: updatedPayment.id,
+          id: existingPayment.id,
         },
         include: paymentWithUserInclude,
       });
@@ -170,6 +209,10 @@ export const rejectPayment = async (req: Request, res: Response) => {
 
     return ok(res, payment, "Payment rejected");
   } catch (err) {
+    logger.error("PAYMENT_REJECTION_FAILED", {
+      paymentId: req.params.id,
+      error: err,
+    });
     return fail(res, 500, "Rejection failed");
   }
 };

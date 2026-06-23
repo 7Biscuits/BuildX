@@ -32,6 +32,16 @@ export class StorageUploadError extends Error {
   }
 }
 
+export class StorageDeleteError extends Error {
+  statusCode: number;
+
+  constructor(message: string, statusCode = 500, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "StorageDeleteError";
+    this.statusCode = statusCode;
+  }
+}
+
 export const uploadPaymentSlip = async ({
   fileBuffer,
   mimeType,
@@ -76,10 +86,47 @@ export const uploadPaymentSlip = async ({
   };
 };
 
+export const deletePaymentSlipByPublicUrl = async (publicUrl: string | null | undefined) => {
+  if (!publicUrl) {
+    return;
+  }
+
+  const objectPath = getPaymentSlipPathFromPublicUrl(publicUrl);
+
+  if (!objectPath) {
+    throw new StorageDeleteError("Failed to resolve payment slip storage path", 500);
+  }
+
+  const { error } = await supabase.storage
+    .from(env.PAYMENT_SLIPS_BUCKET)
+    .remove([objectPath]);
+
+  if (error) {
+    throw new StorageDeleteError("Failed to delete payment slip", 500, {
+      cause: error,
+    });
+  }
+};
+
 const isAllowedImageMimeType = (
   mimeType: string,
 ): mimeType is AllowedImageMimeType => {
   return Object.hasOwn(allowedImageTypes, mimeType);
+};
+
+const getPaymentSlipPathFromPublicUrl = (publicUrl: string) => {
+  try {
+    const url = new URL(publicUrl);
+    const publicPrefix = `/storage/v1/object/public/${env.PAYMENT_SLIPS_BUCKET}/`;
+
+    if (!url.pathname.startsWith(publicPrefix)) {
+      return null;
+    }
+
+    return decodeURIComponent(url.pathname.slice(publicPrefix.length));
+  } catch {
+    return null;
+  }
 };
 
 const hasValidImageSignature = (buffer: Buffer, mimeType: AllowedImageMimeType) => {

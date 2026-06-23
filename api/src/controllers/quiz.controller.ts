@@ -251,6 +251,9 @@ export const listMyQuizzes = async (req: Request, res: Response) => {
     return fail(res, 403, "Admins only");
   }
   const quizzes = await prisma.quiz.findMany({
+    where: {
+      createdByAdminId: user.userId,
+    },
     include: { questions: { include: { options: true } }, sessions: true },
     orderBy: { createdAt: "desc" },
   });

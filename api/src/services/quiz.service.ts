@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import {
+  Prisma,
   ParticipantSessionStatus,
   QuizSessionStatus,
   QuizStatus,
@@ -11,6 +12,11 @@ import { emitQuizEvent } from "./quiz-realtime.service";
 import { logger } from "../lib/logger";
 
 const activeTimers = new Map<string, NodeJS.Timeout>();
+const SERIALIZABLE_RETRY_LIMIT = 2;
+const ACTIVE_PARTICIPANT_STATUSES = [
+  ParticipantSessionStatus.JOINED,
+  ParticipantSessionStatus.TAKING,
+];
 
 const isMissingQuizSessionTableError = (error: unknown) => {
   if (!error || typeof error !== "object") return false;
@@ -92,53 +98,101 @@ export const joinQuizSession = async (joinCode: string, userId: string) => {
     throw new Error("Only verified accounts can join quizzes");
   }
 
-  const session = await prisma.quizSession.findUnique({
-    where: { joinCode },
-  });
+  let attempt = 0;
 
-  if (!session || session.status === QuizSessionStatus.ENDED) {
-    throw new Error("Quiz session is not active");
-  }
+  while (true) {
+    try {
+      const { participant, session } = await prisma.$transaction(
+        async (tx) => {
+          const session = await tx.quizSession.findUnique({
+            where: { joinCode },
+          });
 
-  if (session.status === QuizSessionStatus.RUNNING && !session.allowLateJoin) {
-    throw new Error("Quiz has already started");
-  }
+          if (!session || session.status === QuizSessionStatus.ENDED) {
+            throw new Error("Quiz session is not active");
+          }
 
-  const participant = await prisma.participantSession.upsert({
-    where: {
-      sessionId_userId: {
+          if (
+            session.status === QuizSessionStatus.RUNNING &&
+            !session.allowLateJoin
+          ) {
+            throw new Error("Quiz has already started");
+          }
+
+          if (session.hostAdminId === userId) {
+            throw new Error("Host admin cannot join their own quiz session as a participant");
+          }
+
+          const existingParticipant = await tx.participantSession.findUnique({
+            where: {
+              sessionId_userId: {
+                sessionId: session.id,
+                userId,
+              },
+            },
+            select: {
+              status: true,
+            },
+          });
+
+          if (existingParticipant?.status === ParticipantSessionStatus.DISCONNECTED) {
+            throw new Error("You have been removed from this quiz session");
+          }
+
+          const participant = await tx.participantSession.upsert({
+            where: {
+              sessionId_userId: {
+                sessionId: session.id,
+                userId,
+              },
+            },
+            create: {
+              sessionId: session.id,
+              userId,
+              status:
+                session.status === QuizSessionStatus.RUNNING
+                  ? ParticipantSessionStatus.TAKING
+                  : ParticipantSessionStatus.JOINED,
+            },
+            update: {
+              lastSeenAt: new Date(),
+            },
+            include: {
+              user: {
+                select: { id: true, name: true, email: true },
+              },
+            },
+          });
+
+          return { participant, session };
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
+
+      emitQuizEvent(session.id, "participant:joined", participant);
+      await emitSessionStatus(session.id);
+
+      return {
         sessionId: session.id,
-        userId,
-      },
-    },
-    create: {
-      sessionId: session.id,
-      userId,
-      status:
-        session.status === QuizSessionStatus.RUNNING
-          ? ParticipantSessionStatus.TAKING
-          : ParticipantSessionStatus.JOINED,
-    },
-    update: {
-      lastSeenAt: new Date(),
-    },
-    include: {
-      user: {
-        select: { id: true, name: true, email: true },
-      },
-    },
-  });
+        participantSessionId: participant.id,
+        status: participant.status,
+        session,
+        participant,
+      };
+    } catch (error) {
+      if (
+        isSerializableRetryError(error) &&
+        attempt < SERIALIZABLE_RETRY_LIMIT
+      ) {
+        attempt += 1;
+        continue;
+      }
 
-  emitQuizEvent(session.id, "participant:joined", participant);
-  await emitSessionStatus(session.id);
-
-  return {
-    sessionId: session.id,
-    participantSessionId: participant.id,
-    status: participant.status,
-    session,
-    participant,
-  };
+      throw error;
+    }
+  }
 };
 
 export const startQuizSession = async (sessionId: string, adminId: string) => {
@@ -206,8 +260,8 @@ export const submitQuizForUser = async (
     },
   });
 
-  if (!participant || participant.status === ParticipantSessionStatus.SUBMITTED) {
-    throw new Error("Participant not found or already submitted");
+  if (!participant) {
+    throw new Error("Participant not found");
   }
 
   await persistAnswersAndMarkSubmitted(sessionId, userId, participant.id, answers);
@@ -218,7 +272,7 @@ export const submitQuizForUser = async (
   const remaining = await prisma.participantSession.count({
     where: {
       sessionId,
-      status: { not: ParticipantSessionStatus.SUBMITTED },
+      status: { in: ACTIVE_PARTICIPANT_STATUSES },
     },
   });
 
@@ -239,9 +293,8 @@ export const endQuizSession = async (
       id: sessionId,
       ...(adminId ? { hostAdminId: adminId } : {}),
     },
-    include: {
-      quiz: { include: { questions: { include: { options: true } } } },
-      participantSessions: true,
+    select: {
+      status: true,
     },
   });
 
@@ -268,7 +321,7 @@ export const endQuizSession = async (
     await tx.participantSession.updateMany({
       where: {
         sessionId,
-        status: { not: ParticipantSessionStatus.SUBMITTED },
+        status: { in: ACTIVE_PARTICIPANT_STATUSES },
       },
       data: {
         status: ParticipantSessionStatus.SUBMITTED,
@@ -399,9 +452,69 @@ export const assertSessionAccess = async (sessionId: string, userId: string, rol
 
   const participant = await prisma.participantSession.findUnique({
     where: { sessionId_userId: { sessionId, userId } },
+    select: { status: true },
   });
 
-  return Boolean(participant);
+  return Boolean(participant && participant.status !== ParticipantSessionStatus.DISCONNECTED);
+};
+
+export const kickParticipantFromSession = async (
+  sessionId: string,
+  adminId: string,
+  participantUserId: string,
+) => {
+  if (adminId === participantUserId) {
+    throw new Error("Host admin cannot kick themselves");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const session = await tx.quizSession.findFirst({
+      where: {
+        id: sessionId,
+        hostAdminId: adminId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!session) {
+      throw new Error("Only the host admin can kick participants");
+    }
+
+    const participant = await tx.participantSession.findUnique({
+      where: {
+        sessionId_userId: {
+          sessionId,
+          userId: participantUserId,
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (!participant) {
+      throw new Error("Participant not found");
+    }
+
+    if (participant.status === ParticipantSessionStatus.DISCONNECTED) {
+      return session;
+    }
+
+    await tx.participantSession.update({
+      where: {
+        id: participant.id,
+      },
+      data: {
+        status: ParticipantSessionStatus.DISCONNECTED,
+        lastSeenAt: new Date(),
+      },
+    });
+
+    return session;
+  });
 };
 
 const persistAnswersAndMarkSubmitted = async (
@@ -431,9 +544,14 @@ const persistAnswersAndMarkSubmitted = async (
     if (!question) throw new Error("Invalid question");
 
     const validOptionIds = new Set(question.options.map((option) => option.id));
-    const selectedOptionIds = [...new Set(answer.selectedOptionIds)].filter((id) =>
-      validOptionIds.has(id),
-    );
+    const uniqueSelectedOptionIds = [...new Set(answer.selectedOptionIds)];
+    const hasInvalidOptionId = uniqueSelectedOptionIds.some((id) => !validOptionIds.has(id));
+
+    if (hasInvalidOptionId) {
+      throw new Error("Answer contains invalid option ids for the question");
+    }
+
+    const selectedOptionIds = uniqueSelectedOptionIds;
 
     return {
       questionId: answer.questionId,
@@ -448,7 +566,7 @@ const persistAnswersAndMarkSubmitted = async (
     const submitLock = await tx.participantSession.updateMany({
       where: {
         id: participantSessionId,
-        status: { not: ParticipantSessionStatus.SUBMITTED },
+        status: { in: ACTIVE_PARTICIPANT_STATUSES },
       },
       data: {
         status: ParticipantSessionStatus.SUBMITTED,
@@ -457,7 +575,7 @@ const persistAnswersAndMarkSubmitted = async (
     });
 
     if (submitLock.count === 0) {
-      throw new Error("Participant already submitted");
+      throw new Error("Participant is not active or already submitted");
     }
 
     for (const answer of normalizedAnswers) {
@@ -487,6 +605,13 @@ const persistAnswersAndMarkSubmitted = async (
   });
 };
 
+const isSerializableRetryError = (error: unknown) => {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2034"
+  );
+};
+
 const calculateAndStoreResults = async (sessionId: string) => {
   const session = await prisma.quizSession.findUnique({
     where: { id: sessionId },
@@ -500,22 +625,33 @@ const calculateAndStoreResults = async (sessionId: string) => {
   if (!session || !session.startedAt) return;
 
   const totalQuestions = session.quiz.questions.length;
-  const rows = session.participantSessions.map((participant) => {
-    const score = session.answerSubmissions.filter(
-      (answer) => answer.participantUserId === participant.userId && answer.isCorrect,
-    ).length;
-    const submittedAt = participant.submittedAt ?? session.endedAt ?? new Date();
-    return {
-      participant,
-      score,
-      submittedAt,
-      percentage: totalQuestions === 0 ? 0 : (score / totalQuestions) * 100,
-      durationSeconds: Math.max(
-        0,
-        Math.floor((submittedAt.getTime() - session.startedAt!.getTime()) / 1000),
-      ),
-    };
-  });
+  const correctAnswerCountsByUserId = new Map<string, number>();
+
+  for (const answer of session.answerSubmissions) {
+    if (!answer.isCorrect) continue;
+    correctAnswerCountsByUserId.set(
+      answer.participantUserId,
+      (correctAnswerCountsByUserId.get(answer.participantUserId) ?? 0) + 1,
+    );
+  }
+
+  const rows = session.participantSessions
+    .filter((participant) => participant.status === ParticipantSessionStatus.SUBMITTED)
+    .map((participant) => {
+      const score = correctAnswerCountsByUserId.get(participant.userId) ?? 0;
+      const submittedAt = participant.submittedAt ?? session.endedAt ?? new Date();
+
+      return {
+        participant,
+        score,
+        submittedAt,
+        percentage: totalQuestions === 0 ? 0 : (score / totalQuestions) * 100,
+        durationSeconds: Math.max(
+          0,
+          Math.floor((submittedAt.getTime() - session.startedAt!.getTime()) / 1000),
+        ),
+      };
+    });
 
   rows.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;

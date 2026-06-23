@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { getQuizSocket, disconnectQuizSocket } from "@/lib/socket";
 import { quizApi } from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
 import type { QuizSessionState, ParticipantSession, QuizResult } from "@/types/api";
 
 type QuizState = {
@@ -116,7 +117,13 @@ export const useQuizStore = create<QuizState>((set, get) => ({
     });
 
     socket.on("participant:kicked", ({ userId }: { userId: string }) => {
+      const currentUserId = useAuthStore.getState().user?.id;
+
       set((state) => ({
+        error:
+          userId === currentUserId
+            ? "You have been removed from this quiz session by the host."
+            : state.error,
         participants: state.participants.filter((p) => p.userId !== userId),
       }));
     });

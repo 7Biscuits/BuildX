@@ -1,7 +1,11 @@
 import { Server, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
-import { assertSessionAccess, getSessionState } from "./services/quiz.service";
+import {
+  assertSessionAccess,
+  getSessionState,
+  kickParticipantFromSession,
+} from "./services/quiz.service";
 import { quizRoom, setQuizIo } from "./services/quiz-realtime.service";
 import { env } from "./config/env";
 import { UserRole } from "../generated/prisma/client";
@@ -66,13 +70,35 @@ export const configureSocket = (io: Server) => {
     });
 
     socket.on("quiz:kick-user", async (payload: unknown) => {
-      const user = socket.data.user as JwtPayload;
-      const parsed = kickPayloadValidator.safeParse(payload);
-      if (!parsed.success) return;
-      const { sessionId, userId } = parsed.data;
-      const canAccess = await assertSessionAccess(sessionId, user.userId, user.role);
-      if (user?.role === UserRole.ADMIN && canAccess) {
-        io.to(quizRoom(sessionId)).emit("participant:kicked", { userId });
+      try {
+        const user = socket.data.user as JwtPayload;
+        const parsed = kickPayloadValidator.safeParse(payload);
+        if (!parsed.success) return;
+        const { sessionId, userId } = parsed.data;
+
+        if (user.role !== UserRole.ADMIN) {
+          socket.emit("quiz:error", { message: "Forbidden" });
+          return;
+        }
+
+        await kickParticipantFromSession(sessionId, user.userId, userId);
+
+        const room = quizRoom(sessionId);
+        const roomSockets = await io.in(room).fetchSockets();
+
+        for (const roomSocket of roomSockets) {
+          const roomUser = roomSocket.data.user as JwtPayload | undefined;
+          if (roomUser?.userId !== userId) continue;
+
+          roomSocket.leave(room);
+          roomSocket.emit("participant:kicked", { sessionId, userId });
+        }
+
+        io.to(room).emit("participant:kicked", { sessionId, userId });
+        const state = await getSessionState(sessionId);
+        io.to(room).emit("participant:status-updated", state);
+      } catch {
+        socket.emit("quiz:error", { message: "Failed to kick participant" });
       }
     });
 

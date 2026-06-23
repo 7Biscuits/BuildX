@@ -98,9 +98,7 @@ export const getUserById = async (req: Request, res: Response) => {
     const parsed = idValidator.safeParse(req.params);
 
     if (!parsed.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid user id",
+      return fail(res, 400, "Invalid user id", {
         errors: parsed.error.issues,
       });
     }
@@ -114,21 +112,12 @@ export const getUserById = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return fail(res, 404, "User not found");
     }
 
-    return res.json({
-      success: true,
-      data: user,
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch user",
-    });
+    return ok(res, user);
+  } catch {
+    return fail(res, 500, "Failed to fetch user");
   }
 };
 
@@ -137,11 +126,7 @@ export const getAccountByEmail = async (req: Request, res: Response) => {
     const parsed = emailParamValidator.safeParse(req.params);
 
     if (!parsed.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid email",
-        errors: parsed.error.issues,
-      });
+      return fail(res, 400, "Invalid email", { errors: parsed.error.issues });
     }
 
     const account = await prisma.user.findUnique({
@@ -152,21 +137,12 @@ export const getAccountByEmail = async (req: Request, res: Response) => {
     });
 
     if (!account) {
-      return res.status(404).json({
-        success: false,
-        message: "Account not found",
-      });
+      return fail(res, 404, "Account not found");
     }
 
-    return res.json({
-      success: true,
-      data: account,
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch account",
-    });
+    return ok(res, account);
+  } catch {
+    return fail(res, 500, "Failed to fetch account");
   }
 };
 
@@ -175,9 +151,7 @@ export const getUserByContact = async (req: Request, res: Response) => {
     const parsed = contactParamValidator.safeParse(req.params);
 
     if (!parsed.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid contact number",
+      return fail(res, 400, "Invalid contact number", {
         errors: parsed.error.issues,
       });
     }
@@ -191,21 +165,12 @@ export const getUserByContact = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return fail(res, 404, "User not found");
     }
 
-    return res.json({
-      success: true,
-      data: user,
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch user",
-    });
+    return ok(res, user);
+  } catch {
+    return fail(res, 500, "Failed to fetch user");
   }
 };
 
@@ -214,9 +179,7 @@ export const updateUser = async (req: Request, res: Response) => {
     const idParsed = idValidator.safeParse(req.params);
 
     if (!idParsed.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid user id",
+      return fail(res, 400, "Invalid user id", {
         errors: idParsed.error.issues,
       });
     }
@@ -224,19 +187,16 @@ export const updateUser = async (req: Request, res: Response) => {
     const bodyParsed = updateUserValidator.safeParse(req.body);
 
     if (!bodyParsed.success) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Invalid update fields. Admins can update user name, email, contact, institution, or status.",
-        errors: bodyParsed.error.issues,
-      });
+      return fail(
+        res,
+        400,
+        "Invalid update fields. Admins can update user name, email, contact, institution, or status.",
+        { errors: bodyParsed.error.issues },
+      );
     }
 
     if (Object.keys(bodyParsed.data).length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "At least one field is required",
-      });
+      return fail(res, 400, "At least one field is required");
     }
 
     const existingUser = await prisma.user.findFirst({
@@ -247,10 +207,7 @@ export const updateUser = async (req: Request, res: Response) => {
     });
 
     if (!existingUser) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return fail(res, 404, "User not found");
     }
 
     const user = await prisma.user.update({
@@ -261,11 +218,7 @@ export const updateUser = async (req: Request, res: Response) => {
       select: accountSelect,
     });
 
-    return res.json({
-      success: true,
-      message: "User updated successfully",
-      data: user,
-    });
+    return ok(res, user, "User updated successfully");
   } catch (err) {
     return handleUniqueConstraintError(err, res, "Failed to update user");
   }
@@ -276,26 +229,20 @@ export const updateOwnAdminAccount = async (req: Request, res: Response) => {
     const bodyParsed = updateAdminSelfValidator.safeParse(req.body);
 
     if (!bodyParsed.success) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Invalid update fields. Admins can update their own name, email, contact, or institution.",
-        errors: bodyParsed.error.issues,
-      });
+      return fail(
+        res,
+        400,
+        "Invalid update fields. Admins can update their own name, email, contact, or institution.",
+        { errors: bodyParsed.error.issues },
+      );
     }
 
     if (Object.keys(bodyParsed.data).length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "At least one field is required",
-      });
+      return fail(res, 400, "At least one field is required");
     }
 
     if (bodyParsed.data.email && !isAllowedAdminEmail(bodyParsed.data.email)) {
-      return res.status(403).json({
-        success: false,
-        message: "Admin email must be allowlisted in the environment",
-      });
+      return fail(res, 403, "Admin email must be allowlisted in the environment");
     }
 
     const adminId = req.user?.userId;
@@ -308,10 +255,7 @@ export const updateOwnAdminAccount = async (req: Request, res: Response) => {
     });
 
     if (!admin) {
-      return res.status(403).json({
-        success: false,
-        message: "Forbidden",
-      });
+      return fail(res, 403, "Forbidden");
     }
 
     const updatedAdmin = await prisma.user.update({
@@ -322,11 +266,7 @@ export const updateOwnAdminAccount = async (req: Request, res: Response) => {
       select: accountSelect,
     });
 
-    return res.json({
-      success: true,
-      message: "Admin account updated successfully",
-      data: updatedAdmin,
-    });
+    return ok(res, updatedAdmin, "Admin account updated successfully");
   } catch (err) {
     return handleUniqueConstraintError(
       err,
@@ -341,9 +281,7 @@ export const deleteUser = async (req: Request, res: Response) => {
     const parsed = idValidator.safeParse(req.params);
 
     if (!parsed.success) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid user id",
+      return fail(res, 400, "Invalid user id", {
         errors: parsed.error.issues,
       });
     }
@@ -362,10 +300,7 @@ export const deleteUser = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return fail(res, 404, "User not found");
     }
 
     await prisma.$transaction(async (tx) => {
@@ -393,18 +328,9 @@ export const deleteUser = async (req: Request, res: Response) => {
       });
     });
 
-    return res.json({
-      success: true,
-      message: "User deleted successfully",
-      data: {
-        deletedEmail: user.email,
-      },
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Failed to delete user",
-    });
+    return ok(res, { deletedEmail: user.email }, "User deleted successfully");
+  } catch {
+    return fail(res, 500, "Failed to delete user");
   }
 };
 
@@ -435,14 +361,8 @@ const handleUniqueConstraintError = (
     "code" in err &&
     err.code === "P2002"
   ) {
-    return res.status(409).json({
-      success: false,
-      message: "Email already exists",
-    });
+    return fail(res, 409, "Email already exists");
   }
 
-  return res.status(500).json({
-    success: false,
-    message: fallbackMessage,
-  });
+  return fail(res, 500, fallbackMessage);
 };

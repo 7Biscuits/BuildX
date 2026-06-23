@@ -7,6 +7,7 @@ import {
 } from "../utils/upload.util";
 import { getUploadedPaymentFile } from "../middleware/multer.middleware";
 import { submitPendingPaymentVerification } from "../services/payment-verification.service";
+// Load Multer's Express namespace augmentation so req.file is typed correctly.
 import "multer";
 import { fail, ok } from "../utils/http";
 

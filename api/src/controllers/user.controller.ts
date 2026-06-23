@@ -44,7 +44,7 @@ export const getProfile = async (req: Request, res: Response) => {
     }
 
     return ok(res, user);
-  } catch (err) {
+  } catch {
     return fail(res, 500, "Failed to fetch profile");
   }
 };

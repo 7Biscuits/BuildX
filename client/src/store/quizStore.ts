@@ -49,8 +49,8 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       set({ error: err.message });
     });
 
-    socket.on("quiz:room-joined", ({ sessionId: joinedId }) => {
-      console.log("Joined socket room:", joinedId);
+    socket.on("quiz:room-joined", () => {
+      set({ error: null });
     });
 
     socket.on("quiz:error", ({ message }) => {

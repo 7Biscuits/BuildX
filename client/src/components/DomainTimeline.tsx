@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Code, Gamepad2, Brain, Trophy, X, Calendar, Flame, BookOpen, User, Terminal, ArrowRight, Shield } from "lucide-react";
 
 type DomainKey = "web" | "game" | "ai" | "hackathon";
+type HackathonTab = "problems" | "schedule" | "activities";
 
 const domainData = {
   web: {
@@ -368,16 +369,21 @@ export default function DomainTimeline() {
               <div className="space-y-6">
                 {/* Hackathon sub-tabs navigation */}
                 <div className="flex flex-wrap gap-2">
-                  {[
+                  {([
                     { id: "problems", label: "PROBLEM_STATEMENTS", shortLabel: "PROBLEMS", icon: Shield },
                     { id: "schedule", label: "SCHEDULE_CHRONO", shortLabel: "SCHEDULE", icon: Calendar },
                     { id: "activities", label: "DAY_NIGHT_ACTIVITIES", shortLabel: "ACTIVITIES", icon: Flame }
-                  ].map((tab) => {
+                  ] satisfies Array<{
+                    id: HackathonTab;
+                    label: string;
+                    shortLabel: string;
+                    icon: typeof Shield;
+                  }>).map((tab) => {
                     const TabIcon = tab.icon;
                     return (
                       <button
                         key={tab.id}
-                        onClick={() => setActiveHackathonTab(tab.id as any)}
+                        onClick={() => setActiveHackathonTab(tab.id)}
                         className={`px-3 py-1.5 sm:px-5 sm:py-2 font-bold tracking-wider sm:tracking-widest text-[10px] sm:text-xs uppercase border rounded transition-all duration-200 flex items-center gap-1.5 sm:gap-2 ${
                           activeHackathonTab === tab.id
                             ? "bg-primary text-white border-neon-pink shadow-pink"

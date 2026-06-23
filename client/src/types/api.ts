@@ -142,6 +142,7 @@ export type QuizResult = {
   user?: {
     id: string;
     name: string;
+    email?: string;
   };
 };
 

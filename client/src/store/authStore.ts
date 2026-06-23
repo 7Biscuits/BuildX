@@ -1,11 +1,11 @@
 import { create } from "zustand";
 import { authApi } from "@/lib/api";
 import {
-  API_BASE_URL,
   getStoredAuthToken,
   setStoredAuthToken,
   subscribeToAuthLogout,
 } from "@/lib/api/client";
+import { getApiErrorMessage } from "@/lib/api/error";
 import type { AuthUser, LoginPayload, RegisterPayload, AdminRegisterPayload } from "@/types/api";
 
 type AuthStatus = "idle" | "loading" | "authenticated" | "error";
@@ -34,42 +34,6 @@ type AuthState = {
   clearSession: () => void;
   clearMessage: () => void;
 };
-
-function getErrorMessage(error: unknown) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "response" in error &&
-    typeof error.response === "object" &&
-    error.response !== null &&
-    "data" in error.response
-  ) {
-    const data = error.response.data as { 
-      message?: string; 
-      errors?: { message: string; path: string[] }[] 
-    };
-    if (data.message === "Account not verified by admin yet") {
-      return "Wait until admin has verified your payment receipt.";
-    }
-
-    if (data.message === "Admin account already exists") {
-      return "Admin account already exists. Please log in instead.";
-    }
-
-    if (data.message?.toLowerCase().includes("payment verification was rejected")) {
-      return "Payment rejected. Please upload a valid payment receipt.";
-    }
-
-    if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
-      return data.errors.map(e => `${e.path.join(".")}: ${e.message}`).join(" | ");
-    }
-    return data.message ?? "Something went wrong.";
-  }
-  if (error instanceof Error && error.message === "Network Error") {
-    return `Unable to reach the API at ${API_BASE_URL}. Check that the backend is running and the frontend env points to the correct port.`;
-  }
-  return "Something went wrong.";
-}
 
 function getStoredUser() {
   try {
@@ -142,7 +106,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({
         ...sessionFields(null),
         status: "error",
-        message: getErrorMessage(error),
+        message: getApiErrorMessage(error),
         lastAuthAction: null,
       });
     }
@@ -163,7 +127,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({
         ...sessionFields(null),
         status: "error",
-        message: getErrorMessage(error),
+        message: getApiErrorMessage(error),
         lastAuthAction: null,
       });
     }
@@ -185,7 +149,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch (error) {
       set({
         status: "error",
-        message: getErrorMessage(error),
+        message: getApiErrorMessage(error),
         lastAuthAction: null,
       });
       return false;
@@ -207,7 +171,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({
         ...sessionFields(null),
         status: "error",
-        message: getErrorMessage(error),
+        message: getApiErrorMessage(error),
         lastAuthAction: null,
       });
     }

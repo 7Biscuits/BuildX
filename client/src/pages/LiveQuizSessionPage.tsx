@@ -1,11 +1,12 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { Terminal, Users, Loader2, Play, CheckCircle2, ChevronRight, ChevronLeft, ShieldAlert, Award, ArrowLeft, Trophy, Crown, Check, AlertTriangle, HelpCircle } from "lucide-react";
+import { Terminal, Users, Loader2, Play, CheckCircle2, ChevronRight, ChevronLeft, ShieldAlert, Award, ArrowLeft, Trophy, Crown, Check, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuthStore } from "@/store/authStore";
 import { useQuizStore } from "@/store/quizStore";
 import { quizApi } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/api/error";
 import InteractiveBackground from "@/components/InteractiveBackground";
 import Navbar from "@/components/Navbar";
 import { motion } from "framer-motion";
@@ -37,6 +38,7 @@ export default function LiveQuizSessionPage() {
   const [answers, setAnswers] = useState<{ [qId: string]: string[] }>({});
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   // Remaining seconds timer state
   const [remainingSecs, setRemainingSecs] = useState<number | null>(null);
@@ -66,7 +68,6 @@ export default function LiveQuizSessionPage() {
       if (isPresent) {
         setHasJoined(true);
       } else if (hasJoined && session?.status !== "ENDED") {
-        alert("You have been kicked from this quiz session by the host.");
         navigate("/profile");
       }
     }
@@ -118,7 +119,7 @@ export default function LiveQuizSessionPage() {
           }
         }
       } catch (err) {
-        console.error("Failed to load initial session details", err);
+        setActionMessage(getApiErrorMessage(err, "Failed to load initial session details."));
       }
     }
 
@@ -145,8 +146,7 @@ export default function LiveQuizSessionPage() {
 
       // Auto-submit when timer expires
       if (diff <= 0 && user?.role === "USER" && !submitSuccess) {
-        console.log("Timer expired. Triggering auto-submit...");
-        executeSubmission();
+        void executeSubmission();
       }
     }
 
@@ -212,9 +212,8 @@ export default function LiveQuizSessionPage() {
       }));
       await submitQuizAnswers(sessionId, payload);
       setSubmitSuccess(true);
-    } catch (err: any) {
-      console.error("Answer submission failed", err);
-      alert(err.message || "Failed to submit answers.");
+    } catch (error) {
+      setActionMessage(getApiErrorMessage(error, "Failed to submit answers."));
     } finally {
       setSubmitting(false);
     }
@@ -225,26 +224,23 @@ export default function LiveQuizSessionPage() {
     if (!sessionId) return;
     try {
       await startSession(sessionId);
-    } catch (err: any) {
-      alert(err.message || "Failed to start quiz.");
+    } catch (error) {
+      setActionMessage(getApiErrorMessage(error, "Failed to start quiz."));
     }
   }
 
   async function handleEndQuiz() {
     if (!sessionId) return;
-    if (!confirm("Are you sure you want to force end the session?")) return;
     try {
       await endSession(sessionId);
-    } catch (err: any) {
-      alert(err.message || "Failed to end quiz.");
+    } catch (error) {
+      setActionMessage(getApiErrorMessage(error, "Failed to end quiz."));
     }
   }
 
   function handleKickParticipant(targetUserId: string) {
     if (!sessionId) return;
-    if (confirm("Are you sure you want to kick this contestant?")) {
-      kickParticipant(sessionId, targetUserId);
-    }
+    kickParticipant(sessionId, targetUserId);
   }
 
   const displayedLeaderboard = useMemo(() => {
@@ -305,6 +301,22 @@ export default function LiveQuizSessionPage() {
           <div className="border border-red-500/30 bg-red-950/20 p-3 rounded text-xs text-red-400 font-terminal flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 animate-bounce" />
             <span>CRITICAL: {error}</span>
+          </div>
+        )}
+
+        {actionMessage && (
+          <div className="border border-amber-500/30 bg-amber-950/20 p-3 rounded text-xs text-amber-300 font-terminal flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              <span>{actionMessage}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActionMessage(null)}
+              className="rounded border border-amber-500/20 px-2 py-1 text-[10px] uppercase hover:bg-amber-500/10"
+            >
+              Dismiss
+            </button>
           </div>
         )}
 

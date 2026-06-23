@@ -23,6 +23,7 @@ export const adminUserApi = {
   searchUsers: admin.searchUsers,
   getUser: admin.getUser,
   getAccountByEmail: admin.getAccountByEmail,
+  getUserByContact: admin.getUserByContact,
   updateUser: admin.updateUser,
   deleteUser: admin.deleteUser,
   updateAdminProfile: admin.updateAdminProfile,

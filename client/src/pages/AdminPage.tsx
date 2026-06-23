@@ -21,6 +21,8 @@ import { DeleteConfirmationModal } from "@/components/admin/DeleteConfirmationMo
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { authApi } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/api/error";
 import { useAuthStore } from "@/store/authStore";
 import { useAdminDashboardStore } from "@/store/adminDashboardStore";
 import type { AccountStatus, AdminManagedUser, PaymentVerification } from "@/types/api";
@@ -68,11 +70,18 @@ export default function AdminPage() {
   const [lookupEmail, setLookupEmail] = useState("");
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSaving, setPasswordSaving] = useState(false);
   const [profileForm, setProfileForm] = useState({
     name: user?.name ?? "",
     email: user?.email ?? "",
     contact: user?.contact ?? "",
     institution: user?.institution ?? "",
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
   });
 
   useEffect(() => {
@@ -198,7 +207,24 @@ export default function AdminPage() {
       setUser(updated);
       setSettingsMessage("Admin profile updated successfully.");
     } catch (error) {
-      setSettingsError(error instanceof Error ? error.message : "Failed to update profile.");
+      setSettingsError(getApiErrorMessage(error, "Failed to update profile."));
+    }
+  }
+
+  async function handleChangePassword(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPasswordMessage(null);
+    setPasswordError(null);
+
+    try {
+      setPasswordSaving(true);
+      const result = await authApi.changePasswordAdmin(passwordForm);
+      setPasswordMessage(result.message ?? "Password changed successfully.");
+      setPasswordForm({ currentPassword: "", newPassword: "" });
+    } catch (error) {
+      setPasswordError(getApiErrorMessage(error, "Failed to change password."));
+    } finally {
+      setPasswordSaving(false);
     }
   }
 
@@ -516,68 +542,126 @@ export default function AdminPage() {
               ) : null}
 
               {activeSection === "settings" ? (
-                <Card className="border-white/10 bg-[#0d1018]/92 shadow-terminal">
-                  <CardHeader>
-                    <CardTitle>Settings / Profile</CardTitle>
-                    <CardDescription>
-                      Update your own admin account. Other admins remain read-only.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSaveOwnProfile}>
-                      <SettingsField
-                        label="Name"
-                        value={profileForm.name}
-                        onChange={(value) =>
-                          setProfileForm((current) => ({ ...current, name: value }))
-                        }
-                      />
-                      <SettingsField
-                        label="Email"
-                        type="email"
-                        value={profileForm.email}
-                        onChange={(value) =>
-                          setProfileForm((current) => ({ ...current, email: value }))
-                        }
-                      />
-                      <SettingsField
-                        label="Contact"
-                        value={profileForm.contact}
-                        onChange={(value) =>
-                          setProfileForm((current) => ({ ...current, contact: value }))
-                        }
-                      />
-                      <SettingsField
-                        label="Institution"
-                        value={profileForm.institution}
-                        onChange={(value) =>
-                          setProfileForm((current) => ({ ...current, institution: value }))
-                        }
-                      />
+                <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+                  <Card className="border-white/10 bg-[#0d1018]/92 shadow-terminal">
+                    <CardHeader>
+                      <CardTitle>Settings / Profile</CardTitle>
+                      <CardDescription>
+                        Update your own admin account. Other admins remain read-only.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSaveOwnProfile}>
+                        <SettingsField
+                          label="Name"
+                          value={profileForm.name}
+                          onChange={(value) =>
+                            setProfileForm((current) => ({ ...current, name: value }))
+                          }
+                        />
+                        <SettingsField
+                          label="Email"
+                          type="email"
+                          value={profileForm.email}
+                          onChange={(value) =>
+                            setProfileForm((current) => ({ ...current, email: value }))
+                          }
+                        />
+                        <SettingsField
+                          label="Contact"
+                          value={profileForm.contact}
+                          onChange={(value) =>
+                            setProfileForm((current) => ({ ...current, contact: value }))
+                          }
+                        />
+                        <SettingsField
+                          label="Institution"
+                          value={profileForm.institution}
+                          onChange={(value) =>
+                            setProfileForm((current) => ({ ...current, institution: value }))
+                          }
+                        />
 
-                      {settingsMessage ? (
-                        <div className="md:col-span-2 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-                          {settingsMessage}
-                        </div>
-                      ) : null}
-                      {settingsError ? (
-                        <div className="md:col-span-2 rounded-md border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-                          {settingsError}
-                        </div>
-                      ) : null}
+                        {settingsMessage ? (
+                          <div className="md:col-span-2 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                            {settingsMessage}
+                          </div>
+                        ) : null}
+                        {settingsError ? (
+                          <div className="md:col-span-2 rounded-md border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+                            {settingsError}
+                          </div>
+                        ) : null}
 
-                      <div className="md:col-span-2 flex justify-end">
-                        <Button
-                          type="submit"
-                          className="bg-secondary text-slate-950 hover:bg-secondary/90"
-                          disabled={profileSaving}
-                        >
-                          {profileSaving ? "Saving..." : "Save profile"}
-                        </Button>
-                      </div>
-                    </form>
-                  </CardContent>
-                </Card>
+                        <div className="md:col-span-2 flex justify-end">
+                          <Button
+                            type="submit"
+                            className="bg-secondary text-slate-950 hover:bg-secondary/90"
+                            disabled={profileSaving}
+                          >
+                            {profileSaving ? "Saving..." : "Save profile"}
+                          </Button>
+                        </div>
+                      </form>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-white/10 bg-[#0d1018]/92 shadow-terminal">
+                    <CardHeader>
+                      <CardTitle>Security</CardTitle>
+                      <CardDescription>
+                        Change your admin password through the protected API endpoint.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <form className="space-y-4" onSubmit={handleChangePassword}>
+                        <SettingsField
+                          label="Current password"
+                          type="password"
+                          value={passwordForm.currentPassword}
+                          onChange={(value) =>
+                            setPasswordForm((current) => ({
+                              ...current,
+                              currentPassword: value,
+                            }))
+                          }
+                        />
+                        <SettingsField
+                          label="New password"
+                          type="password"
+                          value={passwordForm.newPassword}
+                          onChange={(value) =>
+                            setPasswordForm((current) => ({
+                              ...current,
+                              newPassword: value,
+                            }))
+                          }
+                        />
+
+                        {passwordMessage ? (
+                          <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                            {passwordMessage}
+                          </div>
+                        ) : null}
+                        {passwordError ? (
+                          <div className="rounded-md border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+                            {passwordError}
+                          </div>
+                        ) : null}
+
+                        <div className="flex justify-end">
+                          <Button
+                            type="submit"
+                            className="bg-secondary text-slate-950 hover:bg-secondary/90"
+                            disabled={passwordSaving}
+                          >
+                            {passwordSaving ? "Changing..." : "Change password"}
+                          </Button>
+                        </div>
+                      </form>
+                    </CardContent>
+                  </Card>
+                </div>
               ) : null}
             </motion.section>
           </div>

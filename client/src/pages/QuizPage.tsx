@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/store/authStore";
 import { useQuizStore } from "@/store/quizStore";
+import { getApiErrorMessage } from "@/lib/api/error";
 
 export default function QuizPage() {
   const { user, status } = useAuthStore();
@@ -34,8 +35,13 @@ export default function QuizPage() {
     try {
       const sessionId = await joinQuiz(joinCode);
       navigate(`/quiz/session/${sessionId}`);
-    } catch (err: any) {
-      setMessage(err.message || "Could not join this quiz session. Verify code and verification status.");
+    } catch (error) {
+      setMessage(
+        getApiErrorMessage(
+          error,
+          "Could not join this quiz session. Verify code and verification status.",
+        ),
+      );
     } finally {
       setLoading(false);
     }

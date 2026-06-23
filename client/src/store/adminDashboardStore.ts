@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { adminUserApi, paymentApi } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/api/error";
 import type {
   AccountStatus,
   AdminManagedUser,
@@ -55,29 +56,6 @@ const DEFAULT_FILTERS: AdminUserFilters = {
   query: "",
 };
 
-function getErrorMessage(error: unknown, fallback: string) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "response" in error &&
-    typeof error.response === "object" &&
-    error.response !== null &&
-    "data" in error.response &&
-    typeof error.response.data === "object" &&
-    error.response.data !== null &&
-    "message" in error.response.data &&
-    typeof error.response.data.message === "string"
-  ) {
-    return error.response.data.message;
-  }
-
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return fallback;
-}
-
 export const useAdminDashboardStore = create<AdminDashboardState>((set, get) => ({
   activeSection: "overview",
   pendingVerifications: [],
@@ -121,7 +99,7 @@ export const useAdminDashboardStore = create<AdminDashboardState>((set, get) => 
     } catch (error) {
       set({
         pendingLoading: false,
-        pendingError: getErrorMessage(error, "Failed to load pending verifications."),
+        pendingError: getApiErrorMessage(error, "Failed to load pending verifications."),
       });
     }
   },
@@ -164,7 +142,7 @@ export const useAdminDashboardStore = create<AdminDashboardState>((set, get) => 
     } catch (error) {
       set({
         usersLoading: false,
-        usersError: getErrorMessage(error, "Failed to load users."),
+        usersError: getApiErrorMessage(error, "Failed to load users."),
       });
     }
   },
@@ -218,7 +196,7 @@ export const useAdminDashboardStore = create<AdminDashboardState>((set, get) => 
     } catch (error) {
       set({
         adminLookupLoading: false,
-        adminLookupError: getErrorMessage(error, "Failed to fetch admin account."),
+        adminLookupError: getApiErrorMessage(error, "Failed to fetch admin account."),
       });
       return null;
     }

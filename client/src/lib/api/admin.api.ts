@@ -69,6 +69,13 @@ export async function getAccountByEmail(email: string): Promise<ApiEnvelope<Admi
   return response.data;
 }
 
+export async function getUserByContact(contact: string): Promise<ApiEnvelope<AdminManagedUser>> {
+  const response = await api.get<ApiEnvelope<AdminManagedUser>>(
+    `/api/admin/users/contact/${encodeURIComponent(contact)}`
+  );
+  return response.data;
+}
+
 export async function updateUser(
   id: string,
   payload: Partial<Omit<AdminManagedUser, "id" | "role" | "deletedUsers" | "paymentVerification">>

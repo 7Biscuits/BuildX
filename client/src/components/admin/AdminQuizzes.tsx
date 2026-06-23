@@ -22,7 +22,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { quizApi } from "@/lib/api";
-import type { Quiz, Question, QuizSessionState } from "@/types/api";
+import { getApiErrorMessage } from "@/lib/api/error";
+import type { Quiz, QuizResult, QuizSessionState } from "@/types/api";
 
 export function AdminQuizzes() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -66,7 +67,7 @@ export function AdminQuizzes() {
   // Session results modal state
   const [resultsModalOpen, setResultsModalOpen] = useState(false);
   const [resultsSessionCode, setResultsSessionCode] = useState("");
-  const [resultsList, setResultsList] = useState<any[]>([]);
+  const [resultsList, setResultsList] = useState<QuizResult[]>([]);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [resultsError, setResultsError] = useState<string | null>(null);
 
@@ -95,8 +96,7 @@ export function AdminQuizzes() {
       if (res.success && res.data) {
         setQuizzes(res.data);
       }
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
       setError("Failed to fetch quizzes. Please check database connectivity.");
     } finally {
       setLoading(false);
@@ -127,8 +127,8 @@ export function AdminQuizzes() {
       } else {
         setCreateError(res.message || "Failed to create quiz.");
       }
-    } catch (err: any) {
-      setCreateError(err.response?.data?.message || err.message || "Failed to create quiz.");
+    } catch (error) {
+      setCreateError(getApiErrorMessage(error, "Failed to create quiz."));
     } finally {
       setCreateLoading(false);
     }
@@ -184,8 +184,8 @@ export function AdminQuizzes() {
       } else {
         setQuestionError(res.message || "Failed to add question.");
       }
-    } catch (err: any) {
-      setQuestionError(err.response?.data?.message || err.message || "Failed to add question.");
+    } catch (error) {
+      setQuestionError(getApiErrorMessage(error, "Failed to add question."));
     } finally {
       setQuestionLoading(false);
     }
@@ -247,8 +247,8 @@ export function AdminQuizzes() {
       } else {
         setFinalizeError(res.message || "Failed to finalize quiz.");
       }
-    } catch (err: any) {
-      setFinalizeError(err.response?.data?.message || err.message || "Failed to finalize quiz.");
+    } catch (error) {
+      setFinalizeError(getApiErrorMessage(error, "Failed to finalize quiz."));
     } finally {
       setFinalizeLoading(false);
     }
@@ -268,8 +268,8 @@ export function AdminQuizzes() {
       } else {
         setResultsError(res.message || "Failed to load results.");
       }
-    } catch (err: any) {
-      setResultsError(err.response?.data?.message || err.message || "Failed to load results.");
+    } catch (error) {
+      setResultsError(getApiErrorMessage(error, "Failed to load results."));
     } finally {
       setResultsLoading(false);
     }
@@ -291,8 +291,8 @@ export function AdminQuizzes() {
       } else {
         setSessionError(res.message || "Failed to launch session.");
       }
-    } catch (err: any) {
-      setSessionError(err.response?.data?.message || err.message || "Failed to launch session.");
+    } catch (error) {
+      setSessionError(getApiErrorMessage(error, "Failed to launch session."));
     } finally {
       setSessionLoading(false);
     }
@@ -550,7 +550,7 @@ export function AdminQuizzes() {
                   </div>
 
                   <p className="text-sm text-slate-300">
-                    Give this passcode to participants. They can input it on their Dashboard or the Join Quiz page to connect in real-time.
+                    Give this passcode to participants. They can input it on the Join Quiz page to connect in real-time.
                   </p>
 
                   <div className="flex flex-wrap items-center gap-4 py-2">

@@ -17,6 +17,7 @@ import {
   Map, 
   Sliders 
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import InteractiveBackground from "@/components/InteractiveBackground";
@@ -65,7 +66,7 @@ type TeamSection = {
   subCode: string;
   colorClass: string;
   glowClass: string;
-  icon: React.ComponentType<any>;
+  icon: LucideIcon;
   members: TeamMember[];
 };
 

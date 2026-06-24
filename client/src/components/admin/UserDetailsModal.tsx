@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { AdminManagedUser } from "@/types/api";
@@ -45,7 +45,7 @@ export function UserDetailsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-lg border border-white/10 bg-[#0c0f16] shadow-terminal">
+      <div className="flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-white/10 bg-[#0c0f16] shadow-terminal">
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div>
             <h3 className="text-lg font-semibold text-white">Edit user</h3>
@@ -62,7 +62,7 @@ export function UserDetailsModal({
         </div>
 
         <form
-          className="grid gap-4 p-5 md:grid-cols-2"
+          className="grid gap-4 overflow-y-auto p-5 md:grid-cols-2"
           onSubmit={(event) => {
             event.preventDefault();
             void onSave(form);
@@ -111,6 +111,33 @@ export function UserDetailsModal({
               <option value="REJECTED">Rejected</option>
             </select>
           </div>
+
+          {user.paymentVerification?.paymentSlipUrl ? (
+            <div className="space-y-3 md:col-span-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                  Payment slip
+                </label>
+                <a
+                  href={user.paymentVerification.paymentSlipUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-200 transition hover:bg-white/5"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open
+                </a>
+              </div>
+
+              <div className="overflow-hidden rounded-md border border-white/10 bg-[#090b12]">
+                <img
+                  src={user.paymentVerification.paymentSlipUrl}
+                  alt={`${user.name} payment slip`}
+                  className="max-h-[280px] w-full object-contain"
+                />
+              </div>
+            </div>
+          ) : null}
 
           <div className="md:col-span-2 flex justify-end gap-3 pt-2">
             <Button

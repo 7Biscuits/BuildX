@@ -42,6 +42,16 @@ export class StorageDeleteError extends Error {
   }
 }
 
+export class StorageReadError extends Error {
+  statusCode: number;
+
+  constructor(message: string, statusCode = 500, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "StorageReadError";
+    this.statusCode = statusCode;
+  }
+}
+
 export const uploadPaymentSlip = async ({
   fileBuffer,
   mimeType,
@@ -106,6 +116,33 @@ export const deletePaymentSlipByPublicUrl = async (publicUrl: string | null | un
       cause: error,
     });
   }
+};
+
+export const createSignedPaymentSlipUrl = async (
+  publicUrl: string | null | undefined,
+  expiresInSeconds = 60 * 60,
+) => {
+  if (!publicUrl) {
+    return null;
+  }
+
+  const objectPath = getPaymentSlipPathFromPublicUrl(publicUrl);
+
+  if (!objectPath) {
+    throw new StorageReadError("Failed to resolve payment slip storage path", 500);
+  }
+
+  const { data, error } = await supabase.storage
+    .from(env.PAYMENT_SLIPS_BUCKET)
+    .createSignedUrl(objectPath, expiresInSeconds);
+
+  if (error || !data?.signedUrl) {
+    throw new StorageReadError("Failed to generate signed payment slip URL", 500, {
+      cause: error,
+    });
+  }
+
+  return data.signedUrl;
 };
 
 const isAllowedImageMimeType = (

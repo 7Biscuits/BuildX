@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { UserRole } from "../../generated/prisma/client";
 import { prisma } from "../lib/prisma";
+import { logger } from "../lib/logger";
 import { idValidator } from "../validators/id.validator";
 import {
   contactParamValidator,
@@ -10,6 +11,10 @@ import {
   userQueryValidator,
 } from "../validators/admin.user.validator";
 import { env } from "../config/env";
+import {
+  createSignedPaymentSlipUrl,
+  deletePaymentSlipByPublicUrl,
+} from "../utils/upload.util";
 import { fail, ok, validationFail } from "../utils/http";
 
 const accountSelect = {
@@ -87,7 +92,7 @@ export const getUsers = async (req: Request, res: Response) => {
       },
     });
 
-    return ok(res, users);
+    return ok(res, await Promise.all(users.map((user) => signUserPaymentSlip(user))));
   } catch (err) {
     return fail(res, 500, "Failed to fetch users");
   }
@@ -115,7 +120,7 @@ export const getUserById = async (req: Request, res: Response) => {
       return fail(res, 404, "User not found");
     }
 
-    return ok(res, user);
+    return ok(res, await signUserPaymentSlip(user));
   } catch {
     return fail(res, 500, "Failed to fetch user");
   }
@@ -140,7 +145,7 @@ export const getAccountByEmail = async (req: Request, res: Response) => {
       return fail(res, 404, "Account not found");
     }
 
-    return ok(res, account);
+    return ok(res, await signUserPaymentSlip(account));
   } catch {
     return fail(res, 500, "Failed to fetch account");
   }
@@ -168,7 +173,7 @@ export const getUserByContact = async (req: Request, res: Response) => {
       return fail(res, 404, "User not found");
     }
 
-    return ok(res, user);
+    return ok(res, await signUserPaymentSlip(user));
   } catch {
     return fail(res, 500, "Failed to fetch user");
   }
@@ -218,7 +223,7 @@ export const updateUser = async (req: Request, res: Response) => {
       select: accountSelect,
     });
 
-    return ok(res, user, "User updated successfully");
+    return ok(res, await signUserPaymentSlip(user), "User updated successfully");
   } catch (err) {
     return handleUniqueConstraintError(err, res, "Failed to update user");
   }
@@ -266,7 +271,7 @@ export const updateOwnAdminAccount = async (req: Request, res: Response) => {
       select: accountSelect,
     });
 
-    return ok(res, updatedAdmin, "Admin account updated successfully");
+    return ok(res, await signUserPaymentSlip(updatedAdmin), "Admin account updated successfully");
   } catch (err) {
     return handleUniqueConstraintError(
       err,
@@ -296,11 +301,27 @@ export const deleteUser = async (req: Request, res: Response) => {
       select: {
         id: true,
         email: true,
+        paymentVerification: {
+          select: {
+            paymentSlipUrl: true,
+          },
+        },
       },
     });
 
     if (!user) {
       return fail(res, 404, "User not found");
+    }
+
+    try {
+      await deletePaymentSlipByPublicUrl(
+        user.paymentVerification?.paymentSlipUrl,
+      );
+    } catch (error) {
+      logger.error("USER_PAYMENT_SLIP_DELETE_FAILED", {
+        userId: user.id,
+        error,
+      });
     }
 
     await prisma.$transaction(async (tx) => {
@@ -329,7 +350,11 @@ export const deleteUser = async (req: Request, res: Response) => {
     });
 
     return ok(res, { deletedEmail: user.email }, "User deleted successfully");
-  } catch {
+  } catch (error) {
+    logger.error("DELETE_USER_FAILED", {
+      userId: req.params.id,
+      error,
+    });
     return fail(res, 500, "Failed to delete user");
   }
 };
@@ -365,4 +390,22 @@ const handleUniqueConstraintError = (
   }
 
   return fail(res, 500, fallbackMessage);
+};
+
+const signUserPaymentSlip = async <
+  T extends { paymentVerification: null | { paymentSlipUrl: string | null } }
+>(user: T) => {
+  if (!user.paymentVerification) {
+    return user;
+  }
+
+  return {
+    ...user,
+    paymentVerification: {
+      ...user.paymentVerification,
+      paymentSlipUrl: await createSignedPaymentSlipUrl(
+        user.paymentVerification.paymentSlipUrl,
+      ),
+    },
+  };
 };

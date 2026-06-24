@@ -11,7 +11,11 @@ import {
   approvePaymentValidator,
   rejectPaymentValidator,
 } from "../validators/admin.user.validator";
-import { deletePaymentSlipByPublicUrl, StorageDeleteError } from "../utils/upload.util";
+import {
+  createSignedPaymentSlipUrl,
+  deletePaymentSlipByPublicUrl,
+  StorageReadError,
+} from "../utils/upload.util";
 import { fail, ok, validationFail } from "../utils/http";
 
 const paymentWithUserInclude = {
@@ -57,8 +61,13 @@ export const getPendingPayments = async (_: Request, res: Response) => {
       },
     });
 
-    return ok(res, payments);
+    const paymentsWithSignedUrls = await Promise.all(
+      payments.map((payment) => signPaymentSlipUrl(payment)),
+    );
+
+    return ok(res, paymentsWithSignedUrls);
   } catch (err) {
+    logger.error("FETCH_PENDING_PAYMENTS_FAILED", { error: err });
     return fail(res, 500, "Failed to fetch payments");
   }
 };
@@ -114,8 +123,12 @@ export const approvePayment = async (req: Request, res: Response) => {
       });
     });
 
-    return ok(res, payment, "Payment approved");
+    return ok(res, await signPaymentSlipUrl(payment), "Payment approved");
   } catch (err) {
+    logger.error("PAYMENT_APPROVAL_FAILED", {
+      paymentId: req.params.id,
+      error: err,
+    });
     return fail(res, 500, "Approval failed");
   }
 };
@@ -163,12 +176,6 @@ export const rejectPayment = async (req: Request, res: Response) => {
         userId: existingPayment.userId,
         error,
       });
-
-      if (error instanceof StorageDeleteError) {
-        return fail(res, error.statusCode, error.message);
-      }
-
-      return fail(res, 500, "Failed to delete payment slip");
     }
 
     const payment = await prisma.$transaction(async (tx) => {
@@ -214,5 +221,33 @@ export const rejectPayment = async (req: Request, res: Response) => {
       error: err,
     });
     return fail(res, 500, "Rejection failed");
+  }
+};
+
+const signPaymentSlipUrl = async <
+  T extends { paymentSlipUrl: string | null }
+>(payment: T) => {
+  try {
+    return {
+      ...payment,
+      paymentSlipUrl: await createSignedPaymentSlipUrl(payment.paymentSlipUrl),
+    };
+  } catch (error) {
+    if (error instanceof StorageReadError) {
+      logger.error("PAYMENT_SLIP_SIGN_URL_FAILED", {
+        paymentId: "id" in payment ? payment.id : undefined,
+        error,
+      });
+    } else {
+      logger.error("UNEXPECTED_PAYMENT_SLIP_SIGN_ERROR", {
+        paymentId: "id" in payment ? payment.id : undefined,
+        error,
+      });
+    }
+
+    return {
+      ...payment,
+      paymentSlipUrl: null,
+    };
   }
 };

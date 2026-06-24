@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 
+const INTRO_SEEN_KEY = "buildx.intro.seen";
+
 const InstagramIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" {...props}>
     <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
@@ -70,8 +72,20 @@ const faqs = [
 ];
 
 export default function HomePage() {
-  const [introDone, setIntroDone] = useState(false);
-  const handleIntroDone = useCallback(() => setIntroDone(true), []);
+  const [introDone, setIntroDone] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.sessionStorage.getItem(INTRO_SEEN_KEY) === "true";
+  });
+  const handleIntroDone = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(INTRO_SEEN_KEY, "true");
+    }
+
+    setIntroDone(true);
+  }, []);
   const { user } = useAuthStore();
   const showAuthPanel = !user;
 

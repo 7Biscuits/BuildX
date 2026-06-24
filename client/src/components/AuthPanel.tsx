@@ -15,18 +15,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthStore } from "@/store/authStore";
 
 export default function AuthPanel() {
-  const { login, register, status, message, user, clearMessage } = useAuthStore();
+  const { login, register, status, message, user, clearMessage, lastAuthAction } =
+    useAuthStore();
   const [receipt, setReceipt] = useState<File | null>(null);
   const [localMessage, setLocalMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"register" | "login">("register");
   const navigate = useNavigate();
   const location = useLocation();
   const isLoading = status === "loading";
-
-  useEffect(() => {
-    // Clear state messages on mount
-    clearMessage();
-  }, [clearMessage]);
 
   useEffect(() => {
     // Redirect if authenticated
@@ -38,6 +34,12 @@ export default function AuthPanel() {
       }
     }
   }, [user, navigate]);
+
+  useEffect(() => {
+    if (lastAuthAction === "register") {
+      setActiveTab("login");
+    }
+  }, [lastAuthAction]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
